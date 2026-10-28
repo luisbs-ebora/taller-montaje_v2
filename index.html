@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Taller de Montaje · Prototipo</title>
+  <meta name="theme-color" content="#f6eddd">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/estilo.css">
+  <script type="importmap">
+  { "imports": {
+      "three": "./assets/vendor/three/three.module.min.js",
+      "three/addons/": "./assets/vendor/three/addons/"
+  } }
+  </script>
+</head>
+<body>
+  <header class="barra">
+    <div class="marca"><span class="punto"></span>Taller de Montaje <span class="chapa">prototipo</span></div>
+    <div class="botones">
+      <button id="vista" type="button" class="btn">Vista general</button>
+      <button id="reiniciar" type="button" class="btn">Empezar de nuevo</button>
+    </div>
+  </header>
+
+  <main class="escena">
+    <canvas id="lienzo" aria-label="Mesa de montaje en 3D"></canvas>
+
+    <p id="pista" class="pista">Haz clic en una pieza para verla · arrastra para girar · rueda para acercar</p>
+
+    <aside class="panel" aria-label="Pasos del montaje">
+      <div class="panel-cab">
+        <h1>Monta el PC</h1>
+        <span id="cuenta">0 de 8</span>
+      </div>
+      <div class="progreso"><span id="progreso"></span></div>
+      <ol id="pasos"></ol>
+      <p class="nota">Puedes hacerlo en otro orden, pero si algo no toca, te avisará.</p>
+    </aside>
+
+    <section id="ficha" class="ficha" hidden aria-live="polite">
+      <button class="cerrar" type="button" aria-label="Cerrar">×</button>
+      <h2></h2>
+      <p></p>
+      <p class="requiere" hidden></p>
+      <button class="accion btn btn-grande" type="button"></button>
+    </section>
+
+    <div id="aviso" class="aviso" role="status"></div>
+    <div id="tooltip" class="tooltip"></div>
+    <div id="burbujas" class="capa-burbujas"></div>
+    <div id="destello" class="destello"></div>
+
+    <div id="sin3d" class="sin3d" hidden>
+      <p>Este navegador no puede mostrar gráficos 3D (WebGL). Prueba con otro navegador o actualiza el de este equipo.</p>
+    </div>
+  </main>
+
+  <dialog id="final" class="final">
+    <h2>¡Equipo montado!</h2>
+    <p>Pulsera, procesador, pasta, disipador, memoria, SSD, fuente… y el cable de corriente al final. Así se hace.</p>
+    <div class="final-botones">
+      <button class="otra btn btn-grande" type="button">Volver a montar</button>
+      <button class="seguir btn" type="button">Seguir mirando</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="assets/js/app.js"></script>
+</body>
+</html>
