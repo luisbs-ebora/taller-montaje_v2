@@ -1,104 +1,29 @@
 // cablea.js — Práctica «Cablea el equipo»: se coge un cable, se lleva a su conector y se enciende para ver qué pasa.
-import * as THREE from 'three';
 import { h, md } from '../util.js';
 import { huecoVisor } from './comun.js';
-import { montaje } from '../piezas3d.js';
-import { COLOR_LED, ponerLuces, encender as luzEn } from './luces3d.js';
+import { crearEquipo } from '../equipo3d.js';
 import { CABLES, DESTINOS, destinoDeParte, crearCaso, estadoInicial, cableEn, conectar, quitar, encender, apagar, explica, puntuar, solucion, TOPE_CRITICO } from '../practica/cablea.js';
 
-const COLOR_CABLE = { atx24: 0x15171a, eps: 0x15171a, pcie: 0x15171a, satac: 0x15171a, satad: 0xc0392b, fancpu: 0x3a3f46, fancaja: 0x3a3f46, frontal: 0x8a8f98 };
-const GROSOR = { atx24: 0.55, eps: 0.36, pcie: 0.36, satac: 0.3, satad: 0.2, fancpu: 0.11, fancaja: 0.11, frontal: 0.2 };
+const COLOR_CABLE = { atx24: 0x17191c, eps: 0x17191c, pcie: 0x17191c, satac: 0x17191c, satad: 0xc0392b, fancpu: 0x4a4f57, fancaja: 0x4a4f57, frontal: 0x9aa0a8 };
 
 export function vistaCablea() {
   let caso, estado, sel = null, pendiente = null, ultimo = null, aviso = null;
-  let modelo = null, luces = {}, cablesG = null, anclas = {};
-  const monitor = h('div.av-monitor', { 'aria-hidden': 'true' });
-  const visor = huecoVisor({ pista: 'Arrastra para girar · rueda para acercar · con un cable cogido, toca su conector', alTocar: parte => tocar(parte) });
+  let equipo = null;
+  const visor = huecoVisor({ pista: 'Arrastra para girar · rueda para acercar · toca la clavija de un cable para cogerlo y después su conector', alTocar: parte => tocar(parte) });
   const panel = h('div.av-panel');
   const el = h('section.av',
     h('span.etiqueta', 'Práctica · Tema 3 · no cuenta para nota'), h('h1', 'Cablea el equipo'),
     h('p.lead', 'Las piezas ya están montadas, pero falta conectar todos los cables. Coge un cable, llévalo a su conector y, cuando creas que está todo, enchufa y enciende.'),
-    h('div.av-rejilla', h('div.av-visor', (visor.el.append(monitor), visor.el)), panel));
+    h('div.av-rejilla', h('div.av-visor', visor.el), panel));
 
-  // --- 3D: conectores de más, anclas de los cables y los cables ---
-  function prepararModelo() {
-    const piezas = { caja: { formatos: ['ATX'] }, placa: { formato: 'ATX' }, cpu: {}, refri: { altura: 155 }, ram: { formato: 'DIMM', gen: 'DDR5', modulos: 2 },
-      almac: { formato: caso.m2 ? 'M.2 2280' : '2,5"' }, fuente: { formato: 'ATX' }, gpu: caso.conGpu ? { largo: 260, pcie8: 2 } : { ninguna: true } };
-    modelo = montaje(piezas); luces = ponerLuces(modelo);
-    const por = {}; let cajaG = null, fuenteG = null, refriG = null;
-    modelo.traverse(o => {
-      if (o.isMesh && o.userData.parte && !por[o.userData.parte]) por[o.userData.parte] = o;
-      if (o.userData.tipo === 'caja') cajaG = o; if (o.userData.tipo === 'fuente') fuenteG = o; if (o.userData.tipo === 'refri') refriG = o;
-    });
-    // El modelo no trae el cabezal CHA_FAN: se añade en el borde de abajo de la placa, a la izquierda de F_PANEL
-    if (por.fpanel) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(1, 0.4, 0.8), new THREE.MeshStandardMaterial({ color: 0xe9e6df, roughness: 0.6 }));
-      m.position.set(por.fpanel.position.x - 6, por.fpanel.position.y, por.fpanel.position.z);
-      m.userData.parte = 'chafan'; por.fpanel.parent.add(m); por.chafan = m;
-    }
-    modelo.updateMatrixWorld(true);
-    const centro = o => o.getWorldPosition(new THREE.Vector3());
-    const { P, A, W } = cajaG.userData;
-    const f = centro(fuenteG);
-    anclas = {
-      destino: { atx24: por.atx24, eps: por.eps, gpu: por.alimentacion, cpufan: por.cpufan, chafan: por.chafan, fpanel: por.fpanel, sata1: por.sata, disco: por.ssd25 },
-      origen: {
-        fuente: i => new THREE.Vector3(f.x + 5.5, f.y + 1 + i * 0.5, f.z + 2 - i * 0.9),
-        frontal: () => new THREE.Vector3((P / 2 - 4) / 10, (-A / 2 + 115) / 10, 0),
-        disipador: () => centro(refriG).add(new THREE.Vector3(0, 0, 4)),
-        caja: () => new THREE.Vector3((P / 2 - 30) / 10, (A / 2 - 175) / 10, 0),
-        disco: () => (por.ssd25 ? centro(por.ssd25).add(new THREE.Vector3(0, 0.6, 0)) : new THREE.Vector3()),
-      },
-      centro,
-    };
-    cablesG = new THREE.Group(); modelo.add(cablesG);
-  }
-
-  function dibujarCables() {
-    if (!cablesG) return;
-    cablesG.clear();
-    let nFuente = 0;
-    for (const id of caso.cables) {
-      const dest = estado.conex[id]; const c = CABLES[id];
-      const i = c.de === 'fuente' ? nFuente++ : 0;
-      if (!dest || !anclas.destino[dest]) continue;
-      const a = anclas.origen[c.de](i), b = anclas.centro(anclas.destino[dest]);
-      // el cable sale hacia el frente de la caja y cuelga un poco, para que no atraviese las piezas
-      const fuera = 6 + GROSOR[id] * 2;
-      const m1 = new THREE.Vector3(a.x + (b.x - a.x) * 0.25, a.y + (b.y - a.y) * 0.25, Math.max(a.z, b.z) + fuera);
-      const m2 = new THREE.Vector3(a.x + (b.x - a.x) * 0.8, a.y + (b.y - a.y) * 0.8, Math.max(a.z, b.z) + fuera * 0.8);
-      const curva = new THREE.CatmullRomCurve3([a, m1, m2, b.clone().add(new THREE.Vector3(0, 0, 0.8)), b], false, 'catmullrom', 0.4);
-      const malla = new THREE.Mesh(new THREE.TubeGeometry(curva, 48, GROSOR[id], 8), new THREE.MeshStandardMaterial({ color: COLOR_CABLE[id], roughness: 0.7 }));
-      malla.userData.noTocar = true; malla.castShadow = true;
-      cablesG.add(malla);
-      const clavija = new THREE.Mesh(new THREE.BoxGeometry(GROSOR[id] * 3.2, GROSOR[id] * 3.2, 0.9), new THREE.MeshStandardMaterial({ color: estado.forzados.includes(id) ? 0xb23a2a : COLOR_CABLE[id], roughness: 0.6 }));
-      clavija.position.copy(b).add(new THREE.Vector3(0, 0, 0.9)); clavija.userData.noTocar = true; cablesG.add(clavija);
-    }
-  }
-
-  // Pone ventiladores, luces y monitor según el último encendido; con el equipo desenchufado, todo parado
-  function ambientar() {
-    const r = estado.enchufado ? ultimo : null;
-    const grupoDe = o => { let p = o; while (p && !p.userData.tipo) p = p.parent; return p ? p.userData.tipo : null; };
-    if (modelo) modelo.traverse(o => {
-      if (!o.userData.gira) return;
-      const t = grupoDe(o);
-      const cual = t === 'refri' ? 'disipador' : t === 'caja' ? 'caja' : t === 'fuente' ? 'fuente' : 'grafica';
-      o.userData.parado = !(r && r.giran[cual]);
-    });
-    for (const n of ['CPU', 'DRAM', 'VGA', 'BOOT']) luzEn(luces[n], r && r.led === n ? COLOR_LED[n] : 0);
-    luzEn(luces.POWER, r && r.luz ? 0x35d07f : 0);
-    const p = r ? r.pantalla : 'Apagada';
-    const tipo = /^Apagada/.test(p) ? 'apagada' : /Sin señal/.test(p) ? 'sin' : /^Arranca normal/.test(p) ? 'imagen' : 'texto';
-    monitor.className = 'av-monitor ' + tipo;
-    monitor.replaceChildren(h('div.av-monitor-pantalla', tipo === 'sin' ? 'Sin señal' : tipo === 'texto' ? p : tipo === 'imagen' ? 'Windows' : ''), h('div.av-monitor-pie'));
-  }
+  function ambientar() { if (equipo) equipo.ambientar(estado.enchufado ? ultimo : null); }
+  function dibujarCables() { if (equipo) equipo.poner(estado.conex, { cogido: sel, forzados: estado.forzados }); }
 
   function nuevo() {
     caso = crearCaso(Math.floor(Math.random() * 2147483647));
     estado = estadoInicial(); sel = null; pendiente = null; ultimo = null; aviso = null;
     const v = visor.iniciar();
-    if (v) { prepararModelo(); v.mostrar(modelo, { vista: 'frente' }); }
+    if (v) { equipo = crearEquipo({ conGpu: caso.conGpu, m2: caso.m2 }); v.mostrar(equipo.modelo, { vista: 'frente' }); }
     visor.rotulo('');
     pintar();
   }
@@ -115,9 +40,17 @@ export function vistaCablea() {
     pintar();
   }
   function tocar(parte) {
-    if (!parte) { visor.rotulo(''); return; }
+    if (!parte) { visor.rotulo(sel ? 'En la mano: ' + CABLES[sel].nombre : ''); return; }
+    if (parte.startsWith('cable:')) { // una clavija: se coge; si estaba conectada, se saca
+      const id = parte.slice(6);
+      if (estado.terminado) return;
+      if (estado.conex[id]) { soltar(id); if (!estado.conex[id]) { sel = id; aviso = ['info', `Has sacado y tienes en la mano: ${CABLES[id].nombre}.`]; } }
+      else { sel = sel === id ? null : id; pendiente = null; aviso = null; }
+      visor.rotulo(sel ? 'En la mano: ' + CABLES[sel].nombre : CABLES[id].nombre);
+      pintar(); return;
+    }
     const d = destinoDeParte(parte, caso);
-    if (!d) { visor.rotulo(''); return; }
+    if (!d) { visor.rotulo(sel ? 'En la mano: ' + CABLES[sel].nombre : ''); return; }
     visor.rotulo(DESTINOS[d].nombre);
     intentar(d);
   }
@@ -139,7 +72,7 @@ export function vistaCablea() {
           : h('button.btn.cb-mini' + (sel === id ? '' : '.sec'), { type: 'button', disabled: estado.terminado, onclick: () => { sel = sel === id ? null : id; pendiente = null; aviso = null; pintar(); } }, sel === id ? 'Soltar' : 'Coger'));
     };
     const cables = h('div.tarjeta.av-paso', h('h3', '1 · Los cables'),
-      h('p.av-nota', 'Puede que sobre alguno: la fuente trae todos sus cables aunque el equipo no los necesite.'),
+      h('p.av-nota', 'Están sueltos dentro de la caja: toca su clavija en el 3D para cogerlo, o usa «Coger». Puede que sobre alguno: la fuente trae todos sus cables aunque el equipo no los necesite.'),
       h('div.cb-lista', caso.cables.map(tarjetaCable)));
 
     const conectores = h('div.tarjeta.av-paso', h('h3', '2 · Dónde lo conectas'),

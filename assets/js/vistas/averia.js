@@ -1,8 +1,7 @@
 // averia.js — Práctica «Este PC no arranca» (Tema 3). Se genera y corrige en el navegador: no cuenta para nota.
 import { h, md, progreso } from '../util.js';
 import { huecoVisor, informeAlumno, informeCompleto, informeComparado } from './comun.js';
-import { montaje } from '../piezas3d.js';
-import { COLOR_LED, ponerLuces, encender } from './luces3d.js';
+import { crearEquipo } from '../equipo3d.js';
 import { FASES_PRACTICA as FASES, ZONAS_PRACTICA as ZONAS, zonaDeParte, crearCaso, crearReto, corregir, informeReferencia, TOPE_CRITICO } from '../practica/averias.js';
 
 const CLAVE = 'averia:t3';
@@ -14,6 +13,24 @@ const SEGURIDAD = [
   ['pulsera', 'Ponerme la pulsera antiestática'],
 ];
 
+// Cómo se ve cada avería en el equipo: qué cable está suelto, a medio meter o en otro conector, y qué pieza está mal puesta.
+// Las que no salen aquí (pila, separador, ajustes de la UEFI, polaridad de un LED) no se ven: hay que revisarlas.
+const SE_VE = {
+  powersw: { sueltos: ['frontal'] }, interruptor: { defectos: { interruptorCero: true } }, atx24: { medio: ['atx24'] },
+  ram: { defectos: { ramSuelta: true } }, eps: { sueltos: ['eps'] }, gpu: { sueltos: ['pcie'] }, monitor: { video: 'placa' },
+  cpufan: { cambia: { fancpu: 'chafan2' } }, disco: { sueltos: ['satad'] }, canal: { defectos: { ramJunta: true } }, calor: { defectos: { disipadorFlojo: true } },
+};
+// Zonas que se revisan mirando el 3D: al tocarlas no se dice cómo están
+const ZONAS_VISIBLES = new Set(['fuente', 'atx24', 'eps', 'ram', 'gpu', 'video', 'disipador', 'disco']);
+const ZONA_DE_CABLE = { atx24: 'atx24', eps: 'eps', pcie: 'gpu', satac: 'disco', satad: 'disco', fancpu: 'disipador', fancaja: 'disipador', frontal: 'fpanel' };
+function zonaDe(parte) {
+  if (!parte) return null;
+  if (parte.startsWith('cable:')) return ZONA_DE_CABLE[parte.slice(6)];
+  if (parte === 'video' || parte === 'monitor') return 'video';
+  if (parte === 'chafan' || parte === 'chafan2') return 'disipador';
+  return zonaDeParte(parte);
+}
+
 const reloj = ms => { const s = Math.floor(ms / 1000); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
 
 // Con «reto» (un número), es el reto de clase: cinco equipos iguales para todos, sin informe y con cronómetro
@@ -24,15 +41,14 @@ export function vistaAveria(reto = null) {
   const notas = [];
   const marcador = h('p.av-marcador');
   const pintaMarcador = () => { if (reto) marcador.textContent = `Reto ${reto} · Equipo ${Math.min(turno + 1, casosReto.length)} de ${casosReto.length} · ${reloj((fin || Date.now()) - inicio)}`; };
-  const monitor = h('div.av-monitor', { 'aria-hidden': 'true' });
-  let modelo = null, luces = {}, pulso = null, arrancando = false;
-  const visor = huecoVisor({ pista: 'Arrastra para girar · rueda para acercar · toca una pieza para revisarla', alTocar: parte => revisar(parte) });
+  let equipo = null, pulso = null, arrancando = false;
+  const visor = huecoVisor({ pista: 'Arrastra para girar · rueda para acercar · mira primero; toca una pieza para revisarla', alTocar: parte => revisar(parte) });
   const panel = h('div.av-panel');
   const el = h('section.averia',
     h('span.etiqueta', reto ? 'Reto de clase · Tema 3 · no cuenta para nota' : 'Práctica · Tema 3 · no cuenta para nota'), h('h1', reto ? 'Reto: cinco equipos que no van bien' : 'Este PC no arranca'),
     reto ? marcador : null,
     h('p.lead', { style: 'color:var(--tinta-2);font-size:19px;max-width:66ch;margin:6px 0 18px' }, 'Un equipo recién montado que no funciona bien. Mira el síntoma, piensa en qué paso del arranque falla, prepárate con seguridad, revisa el equipo en 3D y di qué está mal montado.'),
-    h('div.av-rejilla', h('div.av-visor', (visor.el.append(monitor), visor.el)), panel),
+    h('div.av-rejilla', h('div.av-visor', visor.el), panel),
     reto ? null : h('form.av-reto', { onsubmit: e => { e.preventDefault(); const n = parseInt(e.target.elements.n.value, 10); if (n > 0) location.hash = '#/tema3/reto/' + n; } },
       h('b', 'Reto de clase'), h('span', 'Escribe el número que diga el profesor: a toda la clase le salen los mismos cinco equipos.'),
       h('input', { name: 'n', type: 'number', min: '1', max: '99999', required: true, placeholder: 'Número', 'aria-label': 'Número del reto' }),
@@ -44,10 +60,12 @@ export function vistaAveria(reto = null) {
     estado = { fase: null, seguridad: new Set(), seguridadAntes: null, revisadas: [], registro: [], causa: null, corregido: null, avisoSeguridad: false, informe: {} };
     const v = visor.iniciar();
     if (v) {
-      const sel = { caja: { formatos: ['ATX'] }, placa: { formato: 'ATX' }, cpu: {}, refri: { altura: 155 }, ram: { formato: 'DIMM', gen: 'DDR5', modulos: 2 },
-        almac: { formato: '2,5"' }, fuente: { formato: 'ATX' }, gpu: caso.conGpu ? { largo: 260, pcie8: 2 } : { ninguna: true } };
-      modelo = montaje(sel); luces = ponerLuces(modelo);
-      v.mostrar(modelo, { vista: 'frente' });
+      const ve = SE_VE[caso.fallo.id] || {};
+      equipo = crearEquipo({ conGpu: caso.conGpu, m2: false, defectos: ve.defectos || {}, video: ve.video || (caso.conGpu ? 'gpu' : 'placa') });
+      const conex = { atx24: 'atx24', eps: 'eps', satac: 'disco', satad: 'sata1', fancpu: 'cpufan', fancaja: 'chafan', frontal: 'fpanel', ...(caso.conGpu ? { pcie: 'gpu' } : {}), ...(ve.cambia || {}) };
+      for (const c of ve.sueltos || []) delete conex[c];
+      equipo.poner(conex, { medio: ve.medio || [] });
+      v.mostrar(equipo.modelo, { vista: 'frente' });
     }
     // el equipo que «se enciende un segundo y se apaga» lo hace de verdad al cargar
     clearTimeout(pulso); arrancando = caso.fallo.id === 'separador';
@@ -58,7 +76,7 @@ export function vistaAveria(reto = null) {
 
   function revisar(parte) {
     if (!caso || estado.corregido) return;
-    revisarZona(zonaDeParte(parte));
+    revisarZona(zonaDe(parte));
   }
   // También se puede elegir de la lista: se ilumina en el 3D dónde está
   function revisarZona(zona, desdeLista = false) {
@@ -74,30 +92,24 @@ export function vistaAveria(reto = null) {
       return;
     }
     if (estado.seguridadAntes === null) estado.seguridadAntes = true;
-    let texto = z.bien, mal = false;
-    if (zona === caso.fallo.zona) { texto = caso.fallo.mal; mal = true; }
-    else if (zona === 'gpu' && !caso.conGpu) texto = z.sinGpu;
+    let texto = z.bien; const mal = zona === caso.fallo.zona;
+    if (ZONAS_VISIBLES.has(zona)) texto = 'Lo tienes delante: gira el equipo, acércate y mira cómo está.';
+    else if (zona === 'fpanel') texto = (caso.fallo.id === 'pled' ? caso.fallo.mal : 'En los cables de los LED, el hilo + está en la patilla + del manual.') + ' Si los cables están puestos o no, míralo en el 3D.';
+    else if (mal) texto = caso.fallo.mal;
     if (!estado.revisadas.includes(zona)) { estado.revisadas.push(zona); estado.registro.push({ zona, texto, mal }); }
     pintar();
   }
 
   // Pone el 3D y el monitor como dice el síntoma. Al apagar o desenchufar (paso 2), el equipo se para.
   function ambientar() {
+    if (!equipo) return;
     const f = caso.fallo;
     const enchufado = !estado.seguridad.has('apagar') && !estado.seguridad.has('desenchufar');
     const giran = enchufado && (f.ventiladores || arrancando);
-    if (modelo) modelo.traverse(o => {
-      if (!o.userData.gira) return;
-      // sin sus cables de alimentación, los ventiladores de la gráfica tampoco giran
-      const deGrafica = o.children.some(p => p.children.some(a => a.userData.parte === 'ventiladores'));
-      o.userData.parado = !giran || (deGrafica && f.id === 'gpu');
-    });
-    for (const n of ['CPU', 'DRAM', 'VGA', 'BOOT']) encender(luces[n], giran && f.led === n ? COLOR_LED[n] : 0);
-    encender(luces.POWER, giran && f.id !== 'pled' ? 0x35d07f : 0);
-    const p = !giran || arrancando ? 'Apagada' : f.pantalla;
-    const tipo = /^Apagada/.test(p) ? 'apagada' : /Sin señal/.test(p) ? 'sin' : /^Arranca normal|^Da imagen/.test(p) ? 'imagen' : 'texto';
-    monitor.className = 'av-monitor ' + tipo;
-    monitor.replaceChildren(h('div.av-monitor-pantalla', tipo === 'sin' ? 'Sin señal' : tipo === 'texto' ? p : tipo === 'imagen' ? (/UEFI/.test(p) ? 'UEFI' : 'Windows') : ''), h('div.av-monitor-pie'));
+    equipo.ambientar(giran ? {
+      giran: { fuente: true, disipador: true, caja: true, grafica: caso.conGpu && f.id !== 'gpu' },
+      led: f.led, luz: f.id !== 'pled', pantalla: arrancando ? 'Apagada' : f.pantalla,
+    } : null);
   }
 
   function pintar() {
@@ -106,11 +118,7 @@ export function vistaAveria(reto = null) {
     const leds = h('div.av-leds', LEDS.map(([n, c]) => h('span' + (f.led === n ? '.on' : ''), { style: `--led:${c}` }, h('i'), n)));
     const ficha = h('div.tarjeta.av-ficha',
       h('span.etiqueta', caso.equipo), h('h2', 'Lo que pasa'), h('p', f.sintoma),
-      h('dl.av-datos',
-        h('dt', 'Ventiladores'), h('dd', f.id === 'separador' ? 'Giran un segundo y se paran' : f.ventiladores ? 'Giran' : 'No giran'),
-        h('dt', 'Pantalla'), h('dd', /Press|Reboot|Windows 11/.test(f.pantalla) ? h('code.av-pantalla', f.pantalla) : f.pantalla),
-        h('dt', 'LED de la placa'), h('dd', leds),
-        h('dt', 'Gráfica'), h('dd', caso.conGpu ? 'Tarjeta gráfica dedicada' : 'La del procesador (sin tarjeta)')));
+      h('p.av-nota', 'El equipo está encendido ahora mismo. Míralo en el 3D: los ventiladores, el monitor, la luz del frontal y los LED de la placa, junto al conector de 24 pines.'));
 
     // 1. Fase
     const fase = h('div.tarjeta.av-paso', h('h3', '1 · ¿En qué paso del arranque falla?'),
@@ -127,10 +135,10 @@ export function vistaAveria(reto = null) {
 
     // 3. Revisar
     const listo = estado.seguridad.size === SEGURIDAD.length;
-    const rev = h('div.tarjeta.av-paso' + (listo ? '' : '.bloqueado'), h('h3', '3 · Revisa el equipo'),
-      h('p.av-nota', listo ? 'Toca en el 3D lo que quieras revisar (acerca con la rueda) o elígelo de la lista. La hoja de montaje solo está en la lista. Lee bien lo que encuentras: nadie te va a decir cuál es el fallo.' : 'Primero, el paso 2.'),
+    const rev = h('div.tarjeta.av-paso' + (listo ? '' : '.bloqueado'), h('h3', '3 · Mira y revisa el equipo'),
+      h('p.av-nota', listo ? 'Gira el equipo y acércate: lo que está mal montado se ve. Toca una pieza para revisarla con las manos (o elígela de la lista): algunas cosas no se ven y hay que medirlas o leerlas, como la pila, los separadores o la hoja de montaje. Nadie te va a decir cuál es el fallo.' : 'Primero, el paso 2.'),
       h('div.av-zonas', Object.entries(ZONAS).map(([id, z]) => h('button.chip' + (estado.revisadas.includes(id) ? '.ok' : ''), { type: 'button', disabled: !!estado.corregido, onclick: () => revisarZona(id, true) }, z.nombre))),
-      estado.registro.length ? h('ol.av-registro', estado.registro.map(r => h('li' + (r.mal && estado.corregido ? '.mal' : ''), h('b', ZONAS[r.zona].nombre + ': '), r.texto))) : null);
+      estado.registro.length ? h('ol.av-registro', estado.registro.map(r => h('li' + (r.mal && estado.corregido ? '.mal' : ''), h('b', ZONAS[r.zona].nombre + ': '), r.mal && estado.corregido ? caso.fallo.mal : r.texto))) : null);
 
     // 4. Diagnóstico
     const diag = h('div.tarjeta.av-paso' + (estado.registro.length ? '' : '.bloqueado'), h('h3', '4 · ¿Qué está mal?'),
