@@ -89,12 +89,21 @@ export function crearEquipo(opc = {}) {
   tecla.position.copy(V(-P / 2 - 6, -167, -68)); tecla.rotation.z = defectos.interruptorCero ? -0.22 : 0.22; modelo.add(tecla);
   const marca = caja3(1, 3, 7, defectos.interruptorCero ? 0xd9d9d9 : 0xe5533d); marca.userData.parte = 'interruptor';
   marca.position.copy(V(-P / 2 - 8, defectos.interruptorCero ? -172 : -162, -68)); modelo.add(marca);
+  // rótulo I / O junto a la tecla, como en una fuente de verdad
+  if (typeof document !== 'undefined') {
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128; const g = cv.getContext('2d');
+    g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, 64, 128); g.fillStyle = '#111'; g.font = '700 46px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('I', 32, 34); g.fillText('O', 32, 96);
+    const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
+    const rot = new THREE.Mesh(new THREE.PlaneGeometry(9 * U, 18 * U), new THREE.MeshBasicMaterial({ map: tx }));
+    rot.rotation.y = -Math.PI / 2; rot.position.copy(V(-P / 2 - 4.6, -167, -52)); rot.userData.parte = 'interruptor'; modelo.add(rot);
+  }
 
   // --- Defectos de montaje que se ven ---
   const rams = grupos.ram || [];
-  if (defectos.ramSuelta && rams[1]) { rams[1].rotation.x += 0.07; rams[1].position.z += 0.5; rams[1].position.y -= 0.25; }
+  if (defectos.ramSuelta && rams[1]) { rams[1].rotation.x += 0.13; rams[1].position.z += 0.95; rams[1].position.y -= 0.45; } // un extremo fuera de la ranura
   if (defectos.ramJunta && rams[1]) rams[1].position.x = rams[0].position.x + 0.9; // en la ranura de al lado: A1 y A2
-  if (defectos.disipadorFlojo && grupos.refri) { grupos.refri[0].rotation.y += 0.085; grupos.refri[0].position.z += 0.35; }
+  if (defectos.disipadorFlojo && grupos.refri) { const r = grupos.refri[0]; r.rotation.z += 0.16; r.rotation.y += 0.13; r.position.z += 0.75; } // girado y levantado de un lado
 
   // --- Monitor de verdad, al lado de la torre ---
   const mon = new THREE.Group(); mon.name = 'monitor';
@@ -135,6 +144,11 @@ export function crearEquipo(opc = {}) {
   const solidos = [];
   modelo.traverse(o => { if (o.isMesh && !o.userData.noTocar && o.userData.parte !== 'monitor') solidos.push({ o, b: caja(o) }); });
 
+  // El cable del ventilador del disipador sale de encima del disipador, esté como esté puesto
+  const origen = { ...ORIGEN };
+  if (grupos.refri) { const b = caja(grupos.refri[0]), c = b.getCenter(new THREE.Vector3()); const y = b.max.y / U + 3;
+    origen.fancpu = { raiz: [c.x / U, y, 20], reposo: [c.x / U, y + 14, 52] }; }
+
   // --- Conectores: dónde termina la clavija y desde dónde se llega ---
   function llegada(dest) {
     const c = CONECTOR[dest], m = por[c.parte];
@@ -148,7 +162,7 @@ export function crearEquipo(opc = {}) {
 
   // --- Trazado: sube al carril (un plano por delante de todas las piezas), va en ángulos rectos y baja recto al conector ---
   function trazar(id, dest) {
-    const c = CABLES3D[id], o = ORIGEN[id], ll = llegada(dest);
+    const c = CABLES3D[id], o = origen[id], ll = llegada(dest);
     const raiz = V(...o.raiz), z = c.carril * U, alto = c.clavija[2] * U;
     const fin = ll.fin.clone().add(new THREE.Vector3(0, 0, alto * 0.5));
     const cuello = fin.clone().add(new THREE.Vector3(0, 0, alto * 0.5));
@@ -193,12 +207,12 @@ export function crearEquipo(opc = {}) {
   function poner(conex = {}, { cogido = null, forzados = [], medio = [] } = {}) {
     cablesG.clear(); ultimoInforme = {};
     for (const id of ids) {
-      const c = CABLES3D[id], o = ORIGEN[id], dest = conex[id];
+      const c = CABLES3D[id], o = origen[id], dest = conex[id];
       const mat = new THREE.MeshStandardMaterial({ color: c.color, roughness: 0.75 });
       let curva, pos, tam = c.clavija;
       if (dest && llegada(dest)) {
         const t = trazar(id, dest); curva = t.curva; pos = t.fin; ultimoInforme[id] = t.choques;
-        if (medio.includes(id)) pos = pos.clone().add(new THREE.Vector3(0, 0, 0.7)); // a medio meter
+        if (medio.includes(id)) pos = pos.clone().add(new THREE.Vector3(0, 0, 1.0)); // a medio meter
       } else {
         const a = V(...o.raiz), b = V(...o.reposo);
         const alza = cogido === id ? 1.6 : 0;
@@ -211,7 +225,7 @@ export function crearEquipo(opc = {}) {
         new THREE.MeshStandardMaterial({ color: forzados.includes(id) ? 0xb23a2a : (id === 'satad' ? 0x8e2a20 : 0x0e0f11), roughness: 0.55,
           emissive: cogido === id ? 0xffb020 : 0x000000, emissiveIntensity: cogido === id ? 0.7 : 0 }));
       cl.position.copy(pos);
-      if (medio.includes(id) && dest) cl.rotation.y = 0.16;
+      if (medio.includes(id) && dest) cl.rotation.x = -0.2; // un extremo más levantado que el otro
       if (!dest) cl.rotation.x = Math.PI / 2; // tumbada mientras está suelta
       cl.userData.parte = 'cable:' + id; cl.castShadow = true; cablesG.add(cl);
     }

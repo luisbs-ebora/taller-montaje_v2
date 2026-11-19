@@ -56,6 +56,9 @@ export function vistaAveria(reto = null) {
 
   function nuevo() {
     caso = reto ? casosReto[turno] : crearCaso(Math.floor(Math.random() * 2147483647), { excluir: anterior });
+    // Para preparar una clase o comprobar una avería: ?averia=ram delante de la almohadilla fuerza ese caso
+    const pedida = !reto && new URLSearchParams(location.search).get('averia');
+    if (pedida) for (let i = 1; i < 4000 && caso.fallo.id !== pedida; i++) caso = crearCaso(i);
     anterior = caso.fallo.id;
     estado = { fase: null, seguridad: new Set(), seguridadAntes: null, revisadas: [], registro: [], causa: null, corregido: null, avisoSeguridad: false, informe: {} };
     const v = visor.iniciar();
@@ -66,6 +69,7 @@ export function vistaAveria(reto = null) {
       for (const c of ve.sueltos || []) delete conex[c];
       equipo.poner(conex, { medio: ve.medio || [] });
       v.mostrar(equipo.modelo, { vista: 'frente' });
+      if (new URLSearchParams(location.search).has('averia')) window.__visor = v;
     }
     // el equipo que «se enciende un segundo y se apaga» lo hace de verdad al cargar
     clearTimeout(pulso); arrancando = caso.fallo.id === 'separador';
@@ -171,7 +175,7 @@ export function vistaAveria(reto = null) {
   }
 
   function comprobar() {
-    estado.corregido = corregir(caso, { fase: estado.fase, seguridadAntes: !!estado.seguridadAntes, revisadas: estado.revisadas, causa: estado.causa });
+    estado.corregido = corregir(caso, { fase: estado.fase, seguridadAntes: !!estado.seguridadAntes, revisadas: estado.revisadas, causa: estado.causa, informe: reto ? null : estado.informe });
     if (reto) { notas[turno] = estado.corregido.nota; if (turno === casosReto.length - 1) { fin = Date.now(); clearInterval(tic); pintaMarcador(); } }
     else progreso.anotarPractica({ tema: 'tema3', tipo: CLAVE, nota: estado.corregido.nota });
     const v = visor.visor;
@@ -190,7 +194,10 @@ export function vistaAveria(reto = null) {
         fila(p.fase, p.fase ? 'Has acertado en qué paso del arranque falla.' : 'El paso del arranque no era ese: ' + f.fase.map(x => FASES[x]).join(' o ') + '.'),
         fila(p.seguridad, p.seguridad ? 'Te has preparado con seguridad antes de tocar nada.' : 'Has intentado tocar dentro sin apagar, desenchufar y ponerte la pulsera.'),
         fila(p.zona, p.zona ? 'Has revisado donde estaba el fallo.' : 'No has revisado: ' + minus(ZONAS[f.zona].nombre) + '.'),
-        fila(p.causa, p.causa ? 'Diagnóstico correcto.' : 'El fallo era: ' + minus(f.causa) + '.')),
+        fila(p.causa, p.causa ? 'Diagnóstico correcto.' : 'El fallo era: ' + minus(f.causa) + '.'),
+        ...(r.informe ? [['incidencia', 'Informe · incidencia'], ['comprobaciones', 'Informe · qué has comprobado'], ['causa', 'Informe · causa'], ['solucion', 'Informe · solución']]
+          .map(([id, txt]) => fila(r.informe.campos[id].ok, r.informe.campos[id].ok ? txt + ': vale.' : txt + ': ' + minus(r.informe.campos[id].porque))) : [])),
+      r.informe ? h('p.av-nota', 'El informe lo corrige la web buscando si cada apartado nombra lo que tiene que nombrar. Si crees que el tuyo está bien y te lo ha dado por malo, enséñaselo al profesor.') : null,
       h('p', h('b', 'Solución: '), f.solucion),
       reto ? null : informeComparado(estado.informe, informeReferencia(caso)),
       h('p.av-nota', `Has revisado ${estado.revisadas.length} ${estado.revisadas.length === 1 ? 'zona' : 'zonas'}. Un técnico empieza por lo más sencillo y por lo que señalan el síntoma y los LED.`),
