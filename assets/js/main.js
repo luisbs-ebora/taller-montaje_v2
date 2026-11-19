@@ -8,6 +8,10 @@ import { vistaAnimado } from './vistas/animado.js';
 import { vistaPorDentro } from './vistas/pordentro.js';
 import { vistaPracticas, vistaExamenes } from './vistas/evaluacion.js';
 import { vistaAveria } from './vistas/averia.js';
+import { vistaMedir } from './vistas/medir.js';
+import { vistaExamen34 } from './vistas/examen34.js';
+import { crearLateral } from './lateral.js';
+import { vistaCablea } from './vistas/cablea.js';
 
 const main = document.getElementById('contenido');
 let actual = null;
@@ -32,6 +36,10 @@ const RUTAS = [
   [/^lecciones$/, () => vistaLecciones()],
   [/^practicas$/, () => vistaPracticas()],
   [/^tema3\/practica$/, () => vistaAveria()],
+  [/^tema3\/cablea$/, () => vistaCablea()],
+  [/^tema3\/reto\/(\d{1,5})$/, m => vistaAveria(Number(m[1]))],
+  [/^tema4\/practica$/, () => vistaMedir()],
+  [/^tema3\/examen$/, () => vistaExamen34()],
   [/^examenes$/, () => vistaExamenes()],
   [/^pordentro(?:\/([\w-]+))?$/, m => vistaPorDentro(m[1])],
   [/^([\w-]+)$/, m => vistaTema(m[1])],
@@ -48,10 +56,7 @@ async function navegar() {
   if (actual && actual.destruir) { try { actual.destruir(); } catch (e) { console.error(e); } }
   actual = null;
   main.replaceChildren(h('div.cargando', 'Cargando…'));
-  const seccion = ruta === '' ? 'inicio' : ruta === 'creditos' ? 'creditos' : ruta.startsWith('pordentro') ? 'pordentro' : ruta === 'practicas' || ruta.endsWith('/practica') ? 'practicas' : ruta === 'examenes' || ruta.endsWith('/examen') ? 'examenes' : ruta.includes('/leccion/') || /^[\w-]+$/.test(ruta) ? 'tema' : ruta.split('/').pop();
-  document.querySelectorAll('.menu a').forEach(a => {
-    if (a.dataset.ruta === seccion) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
-  });
+  if (lateral) lateral.actualizar(ruta);
   try {
     const r = RUTAS.find(([re]) => re.test(ruta));
     if (!r) throw new Error('Esta página no existe.');
@@ -69,6 +74,13 @@ async function navegar() {
   window.scrollTo(0, 0);
   main.focus({ preventScroll: true });
 }
+
+// El menú lateral se monta aparte: si fallara, la web sigue funcionando sin él.
+let lateral = null;
+const rutaActual = () => decodeURIComponent(location.hash.replace(/^#\/?/, '')).replace(/\/$/, '');
+crearLateral(document.getElementById('lateral'), document.getElementById('btn-lateral'))
+  .then(l => { lateral = l; l.actualizar(rutaActual()); })
+  .catch(e => { console.error(e); document.getElementById('btn-lateral').hidden = true; });
 
 window.addEventListener('hashchange', navegar);
 navegar();

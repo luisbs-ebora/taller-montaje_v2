@@ -1,8 +1,9 @@
 // averia.js — Práctica «Este PC no arranca» (Tema 3). Se genera y corrige en el navegador: no cuenta para nota.
 import { h, md, progreso } from '../util.js';
-import { huecoVisor } from './comun.js';
+import { huecoVisor, informeAlumno, informeCompleto, informeComparado } from './comun.js';
 import { montaje } from '../piezas3d.js';
-import { FASES, ZONAS, zonaDeParte, crearCaso, corregir, informe } from '../practica/averias.js';
+import { COLOR_LED, ponerLuces, encender } from './luces3d.js';
+import { FASES_PRACTICA as FASES, ZONAS_PRACTICA as ZONAS, zonaDeParte, crearCaso, crearReto, corregir, informeReferencia, TOPE_CRITICO } from '../practica/averias.js';
 
 const CLAVE = 'averia:t3';
 const minus = t => t.charAt(0).toLowerCase() + t.slice(1);
@@ -13,25 +14,44 @@ const SEGURIDAD = [
   ['pulsera', 'Ponerme la pulsera antiestática'],
 ];
 
-export function vistaAveria() {
+const reloj = ms => { const s = Math.floor(ms / 1000); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+
+// Con «reto» (un número), es el reto de clase: cinco equipos iguales para todos, sin informe y con cronómetro
+export function vistaAveria(reto = null) {
   let caso, estado, anterior = null;
+  const casosReto = reto ? crearReto(reto) : null;
+  let turno = 0, inicio = 0, fin = 0, tic = null;
+  const notas = [];
+  const marcador = h('p.av-marcador');
+  const pintaMarcador = () => { if (reto) marcador.textContent = `Reto ${reto} · Equipo ${Math.min(turno + 1, casosReto.length)} de ${casosReto.length} · ${reloj((fin || Date.now()) - inicio)}`; };
+  const monitor = h('div.av-monitor', { 'aria-hidden': 'true' });
+  let modelo = null, luces = {}, pulso = null, arrancando = false;
   const visor = huecoVisor({ pista: 'Arrastra para girar · rueda para acercar · toca una pieza para revisarla', alTocar: parte => revisar(parte) });
   const panel = h('div.av-panel');
   const el = h('section.averia',
-    h('span.etiqueta', 'Práctica · Tema 3 · no cuenta para nota'), h('h1', 'Este PC no arranca'),
+    h('span.etiqueta', reto ? 'Reto de clase · Tema 3 · no cuenta para nota' : 'Práctica · Tema 3 · no cuenta para nota'), h('h1', reto ? 'Reto: cinco equipos que no van bien' : 'Este PC no arranca'),
+    reto ? marcador : null,
     h('p.lead', { style: 'color:var(--tinta-2);font-size:19px;max-width:66ch;margin:6px 0 18px' }, 'Un equipo recién montado que no funciona bien. Mira el síntoma, piensa en qué paso del arranque falla, prepárate con seguridad, revisa el equipo en 3D y di qué está mal montado.'),
-    h('div.av-rejilla', h('div.av-visor', visor.el), panel));
+    h('div.av-rejilla', h('div.av-visor', (visor.el.append(monitor), visor.el)), panel),
+    reto ? null : h('form.av-reto', { onsubmit: e => { e.preventDefault(); const n = parseInt(e.target.elements.n.value, 10); if (n > 0) location.hash = '#/tema3/reto/' + n; } },
+      h('b', 'Reto de clase'), h('span', 'Escribe el número que diga el profesor: a toda la clase le salen los mismos cinco equipos.'),
+      h('input', { name: 'n', type: 'number', min: '1', max: '99999', required: true, placeholder: 'Número', 'aria-label': 'Número del reto' }),
+      h('button.btn.sec', { type: 'submit' }, 'Empezar el reto')));
 
   function nuevo() {
-    caso = crearCaso(Math.floor(Math.random() * 2147483647), { excluir: anterior });
+    caso = reto ? casosReto[turno] : crearCaso(Math.floor(Math.random() * 2147483647), { excluir: anterior });
     anterior = caso.fallo.id;
-    estado = { fase: null, seguridad: new Set(), seguridadAntes: null, revisadas: [], registro: [], causa: null, corregido: null, avisoSeguridad: false };
+    estado = { fase: null, seguridad: new Set(), seguridadAntes: null, revisadas: [], registro: [], causa: null, corregido: null, avisoSeguridad: false, informe: {} };
     const v = visor.iniciar();
     if (v) {
       const sel = { caja: { formatos: ['ATX'] }, placa: { formato: 'ATX' }, cpu: {}, refri: { altura: 155 }, ram: { formato: 'DIMM', gen: 'DDR5', modulos: 2 },
         almac: { formato: '2,5"' }, fuente: { formato: 'ATX' }, gpu: caso.conGpu ? { largo: 260, pcie8: 2 } : { ninguna: true } };
-      v.mostrar(montaje(sel), { vista: 'frente' });
+      modelo = montaje(sel); luces = ponerLuces(modelo);
+      v.mostrar(modelo, { vista: 'frente' });
     }
+    // el equipo que «se enciende un segundo y se apaga» lo hace de verdad al cargar
+    clearTimeout(pulso); arrancando = caso.fallo.id === 'separador';
+    if (arrancando) pulso = setTimeout(() => { arrancando = false; ambientar(); }, 1400);
     visor.rotulo('');
     pintar();
   }
@@ -44,7 +64,7 @@ export function vistaAveria() {
   function revisarZona(zona, desdeLista = false) {
     if (!zona) { visor.rotulo(''); return; }
     const z = ZONAS[zona];
-    if (desdeLista && visor.visor) visor.visor.resaltar(z.partes[0]);
+    if (desdeLista && visor.visor && z.partes.length) visor.visor.resaltar(z.partes[0]);
     visor.rotulo(z.nombre);
     if (estado.seguridad.size < SEGURIDAD.length) {
       // tocar dentro sin prepararse: aviso y cuenta como fallo de seguridad
@@ -61,44 +81,72 @@ export function vistaAveria() {
     pintar();
   }
 
+  // Pone el 3D y el monitor como dice el síntoma. Al apagar o desenchufar (paso 2), el equipo se para.
+  function ambientar() {
+    const f = caso.fallo;
+    const enchufado = !estado.seguridad.has('apagar') && !estado.seguridad.has('desenchufar');
+    const giran = enchufado && (f.ventiladores || arrancando);
+    if (modelo) modelo.traverse(o => {
+      if (!o.userData.gira) return;
+      // sin sus cables de alimentación, los ventiladores de la gráfica tampoco giran
+      const deGrafica = o.children.some(p => p.children.some(a => a.userData.parte === 'ventiladores'));
+      o.userData.parado = !giran || (deGrafica && f.id === 'gpu');
+    });
+    for (const n of ['CPU', 'DRAM', 'VGA', 'BOOT']) encender(luces[n], giran && f.led === n ? COLOR_LED[n] : 0);
+    encender(luces.POWER, giran && f.id !== 'pled' ? 0x35d07f : 0);
+    const p = !giran || arrancando ? 'Apagada' : f.pantalla;
+    const tipo = /^Apagada/.test(p) ? 'apagada' : /Sin señal/.test(p) ? 'sin' : /^Arranca normal|^Da imagen/.test(p) ? 'imagen' : 'texto';
+    monitor.className = 'av-monitor ' + tipo;
+    monitor.replaceChildren(h('div.av-monitor-pantalla', tipo === 'sin' ? 'Sin señal' : tipo === 'texto' ? p : tipo === 'imagen' ? (/UEFI/.test(p) ? 'UEFI' : 'Windows') : ''), h('div.av-monitor-pie'));
+  }
+
   function pintar() {
+    ambientar();
     const f = caso.fallo;
     const leds = h('div.av-leds', LEDS.map(([n, c]) => h('span' + (f.led === n ? '.on' : ''), { style: `--led:${c}` }, h('i'), n)));
     const ficha = h('div.tarjeta.av-ficha',
       h('span.etiqueta', caso.equipo), h('h2', 'Lo que pasa'), h('p', f.sintoma),
       h('dl.av-datos',
         h('dt', 'Ventiladores'), h('dd', f.id === 'separador' ? 'Giran un segundo y se paran' : f.ventiladores ? 'Giran' : 'No giran'),
-        h('dt', 'Pantalla'), h('dd', /Press|Reboot/.test(f.pantalla) ? h('code.av-pantalla', f.pantalla) : f.pantalla),
+        h('dt', 'Pantalla'), h('dd', /Press|Reboot|Windows 11/.test(f.pantalla) ? h('code.av-pantalla', f.pantalla) : f.pantalla),
         h('dt', 'LED de la placa'), h('dd', leds),
         h('dt', 'Gráfica'), h('dd', caso.conGpu ? 'Tarjeta gráfica dedicada' : 'La del procesador (sin tarjeta)')));
 
     // 1. Fase
     const fase = h('div.tarjeta.av-paso', h('h3', '1 · ¿En qué paso del arranque falla?'),
-      h('div.av-opciones', Object.entries(FASES).map(([id, txt]) => h('button.opcion' + (estado.fase === id ? (f.fase.includes(id) ? '.ok' : '.ko') : ''),
-        { type: 'button', disabled: !!estado.fase || !!estado.corregido, onclick: () => { estado.fase = id; pintar(); } }, txt))),
-      estado.fase ? h('p.explicacion', { html: (f.fase.includes(estado.fase) ? '<b>Bien.</b> ' : '<b>No es ese.</b> ') + md(explicaFase(f)) }) : null);
+      h('div.av-opciones', Object.entries(FASES).map(([id, txt]) => h('button.opcion' + (estado.corregido ? (f.fase.includes(id) ? '.ok' : estado.fase === id ? '.ko' : '') : estado.fase === id ? '.elegida' : ''),
+        { type: 'button', disabled: !!estado.corregido, onclick: () => { estado.fase = id; pintar(); } }, txt))),
+      estado.corregido ? h('p.explicacion', { html: (f.fase.includes(estado.fase) ? '<b>Bien.</b> ' : '<b>No era ese.</b> ') + md(explicaFase(f)) }) : null);
 
     // 2. Seguridad
     const seg = h('div.tarjeta.av-paso' + (estado.fase ? '' : '.bloqueado'), h('h3', '2 · Antes de abrir la caja'),
       h('div.av-seguridad', SEGURIDAD.map(([id, txt]) => h('button.av-check' + (estado.seguridad.has(id) ? '.hecho' : ''),
         { type: 'button', disabled: !estado.fase || estado.seguridad.has(id) || !!estado.corregido, onclick: () => { estado.seguridad.add(id); estado.avisoSeguridad = false; pintar(); } },
         h('span', estado.seguridad.has(id) ? '✓' : ''), txt))),
-      estado.avisoSeguridad ? h('p.mensaje.error', '¡Alto! Antes de tocar nada dentro: apaga, interruptor en 0, desenchufa, descarga y ponte la pulsera.') : null);
+      estado.avisoSeguridad ? h('p.mensaje.error', '¡Alto! Has ido a tocar dentro sin prepararte: es un fallo crítico y este equipo ya no pasa de un 4. Apaga, interruptor en 0, desenchufa, descarga y ponte la pulsera.') : null);
 
     // 3. Revisar
     const listo = estado.seguridad.size === SEGURIDAD.length;
     const rev = h('div.tarjeta.av-paso' + (listo ? '' : '.bloqueado'), h('h3', '3 · Revisa el equipo'),
-      h('p.av-nota', listo ? 'Toca en el 3D lo que quieras revisar (acerca con la rueda) o elígelo de la lista. Empieza por lo más sencillo y por lo que señalan el síntoma y los LED.' : 'Primero, el paso 2.'),
+      h('p.av-nota', listo ? 'Toca en el 3D lo que quieras revisar (acerca con la rueda) o elígelo de la lista. La hoja de montaje solo está en la lista. Lee bien lo que encuentras: nadie te va a decir cuál es el fallo.' : 'Primero, el paso 2.'),
       h('div.av-zonas', Object.entries(ZONAS).map(([id, z]) => h('button.chip' + (estado.revisadas.includes(id) ? '.ok' : ''), { type: 'button', disabled: !!estado.corregido, onclick: () => revisarZona(id, true) }, z.nombre))),
-      estado.registro.length ? h('ol.av-registro', estado.registro.map(r => h('li' + (r.mal ? '.mal' : ''), h('b', ZONAS[r.zona].nombre + ': '), r.texto))) : null);
+      estado.registro.length ? h('ol.av-registro', estado.registro.map(r => h('li' + (r.mal && estado.corregido ? '.mal' : ''), h('b', ZONAS[r.zona].nombre + ': '), r.texto))) : null);
 
     // 4. Diagnóstico
     const diag = h('div.tarjeta.av-paso' + (estado.registro.length ? '' : '.bloqueado'), h('h3', '4 · ¿Qué está mal?'),
       h('div.av-opciones', caso.causas.map(c => h('button.opcion' + (estado.causa === c.id ? '.elegida' : '') + (estado.corregido ? (c.id === f.id ? '.ok' : estado.causa === c.id ? '.ko' : '') : ''),
         { type: 'button', disabled: !estado.registro.length || !!estado.corregido, onclick: () => { estado.causa = c.id; pintar(); } }, c.texto))),
-      !estado.corregido ? h('button.btn.azul', { type: 'button', disabled: !estado.causa, onclick: () => comprobar() }, 'Comprobar') : null);
+      );
 
-    const partes = [ficha, fase, seg, rev, diag];
+    // 5. Informe de montaje
+    const listoInforme = () => !!estado.causa && (!!reto || informeCompleto(estado.informe));
+    const bComprobar = h('button.btn.azul', { type: 'button', disabled: !listoInforme(), onclick: () => comprobar() }, 'Comprobar');
+    const inf = h('div.tarjeta.av-paso' + (estado.registro.length ? '' : '.bloqueado'), h('h3', '5 · Escribe el informe'),
+      h('p.av-nota', 'Lo que irá en el informe de montaje: qué pasaba, qué has revisado, cuál era la causa y cómo se arregla.'),
+      informeAlumno(estado.informe, { bloqueado: !estado.registro.length || !!estado.corregido, alCambiar: () => { bComprobar.disabled = !listoInforme(); } }),
+      !estado.corregido ? bComprobar : null);
+
+    const partes = reto ? [ficha, fase, seg, rev, diag, estado.corregido ? null : h('div', bComprobar)].filter(Boolean) : [ficha, fase, seg, rev, diag, inf];
     if (estado.corregido) partes.push(resultado());
     panel.replaceChildren(...partes);
   }
@@ -108,6 +156,7 @@ export function vistaAveria() {
       fuente: 'Si **no pasa nada** (o se enciende y se apaga enseguida), la fuente no llega a arrancar o se corta: enchufe, interruptor, 24 pines, POWER SW o un cortocircuito.',
       post: 'Si **los ventiladores giran** pero no hay imagen, o sale un aviso al arrancar, el fallo está en el **POST**: memoria, EPS, gráfica, monitor o ventilador del procesador.',
       arranque: 'Si pasa el POST pero dice que **no encuentra con qué arrancar**, el fallo está en la búsqueda del arranque: disco, orden de arranque o sistema.',
+      despues: 'Si **arranca y funciona**, el fallo no está en el arranque: sale después, al comprobar el equipo en la UEFI, en Windows o con una utilidad (velocidad y canales de la memoria, temperatura, TPM, luces del frontal).',
       reposo: 'Si **funciona** pero pierde la fecha y la hora al desenchufarlo, el fallo está en lo que guarda la placa en **reposo**: la pila.',
     };
     return f.fase.map(x => txt[x]).join(' ');
@@ -115,9 +164,10 @@ export function vistaAveria() {
 
   function comprobar() {
     estado.corregido = corregir(caso, { fase: estado.fase, seguridadAntes: !!estado.seguridadAntes, revisadas: estado.revisadas, causa: estado.causa });
-    progreso.anotarPractica({ tema: 'tema3', tipo: CLAVE, nota: estado.corregido.nota });
+    if (reto) { notas[turno] = estado.corregido.nota; if (turno === casosReto.length - 1) { fin = Date.now(); clearInterval(tic); pintaMarcador(); } }
+    else progreso.anotarPractica({ tema: 'tema3', tipo: CLAVE, nota: estado.corregido.nota });
     const v = visor.visor;
-    if (v) v.resaltar(ZONAS[caso.fallo.zona].partes[0]);
+    if (v && ZONAS[caso.fallo.zona].partes.length) v.resaltar(ZONAS[caso.fallo.zona].partes[0]);
     visor.rotulo('Aquí estaba el fallo: ' + ZONAS[caso.fallo.zona].nombre);
     pintar();
   }
@@ -127,16 +177,29 @@ export function vistaAveria() {
     const fila = (ok, txt) => h('li' + (ok ? '.ok' : '.ko'), ok ? '✓ ' : '✗ ', txt);
     return h('div.tarjeta.av-resultado',
       h('h3', `Resultado: ${r.nota.toLocaleString('es-ES')} / 10`),
+      r.criticos.length ? h('p.mensaje.error', h('b', `Fallo crítico: la nota no pasa de ${TOPE_CRITICO}. `), r.criticos.join(' ')) : null,
       h('ul.av-puntos',
         fila(p.fase, p.fase ? 'Has acertado en qué paso del arranque falla.' : 'El paso del arranque no era ese: ' + f.fase.map(x => FASES[x]).join(' o ') + '.'),
         fila(p.seguridad, p.seguridad ? 'Te has preparado con seguridad antes de tocar nada.' : 'Has intentado tocar dentro sin apagar, desenchufar y ponerte la pulsera.'),
         fila(p.zona, p.zona ? 'Has revisado donde estaba el fallo.' : 'No has revisado: ' + minus(ZONAS[f.zona].nombre) + '.'),
         fila(p.causa, p.causa ? 'Diagnóstico correcto.' : 'El fallo era: ' + minus(f.causa) + '.')),
       h('p', h('b', 'Solución: '), f.solucion),
-      h('p', h('b', 'En el informe de montaje: '), h('i', informe(caso))),
+      reto ? null : informeComparado(estado.informe, informeReferencia(caso)),
       h('p.av-nota', `Has revisado ${estado.revisadas.length} ${estado.revisadas.length === 1 ? 'zona' : 'zonas'}. Un técnico empieza por lo más sencillo y por lo que señalan el síntoma y los LED.`),
-      h('button.btn.azul', { type: 'button', onclick: () => { nuevo(); el.scrollIntoView({ behavior: 'smooth' }); } }, 'Otro equipo'));
+      !reto ? h('button.btn.azul', { type: 'button', onclick: () => { nuevo(); el.scrollIntoView({ behavior: 'smooth' }); } }, 'Otro equipo')
+        : turno < casosReto.length - 1 ? h('button.btn.azul', { type: 'button', onclick: () => { turno++; pintaMarcador(); nuevo(); el.scrollIntoView({ behavior: 'smooth' }); } }, `Siguiente equipo (${turno + 2} de ${casosReto.length})`)
+        : finalReto());
   }
 
-  return { el, montado() { nuevo(); }, destruir() { visor.destruir(); } };
+  function finalReto() {
+    const media = Math.round(notas.reduce((a, b) => a + b, 0) / notas.length * 10) / 10;
+    return h('div.av-final',
+      h('h3', `Reto ${reto} terminado`),
+      h('p.av-final-nota', h('b', media.toLocaleString('es-ES') + ' / 10'), ' en ', h('b', reloj(fin - inicio))),
+      h('ol', casosReto.map((c, i) => h('li', `${c.fallo.causa}: `, h('b', notas[i].toLocaleString('es-ES'))))),
+      h('p.av-nota', 'Enséñale esta pantalla al profesor. Gana quien tenga más nota; si hay empate, quien haya tardado menos. Con un fallo crítico, ese equipo no pasa de un 4.'),
+      h('a.btn.sec', { href: '#/tema3/practica' }, 'Volver a la práctica'));
+  }
+
+  return { el, montado() { if (reto) { inicio = Date.now(); pintaMarcador(); tic = setInterval(pintaMarcador, 1000); } nuevo(); }, destruir() { clearInterval(tic); clearTimeout(pulso); visor.destruir(); } };
 }

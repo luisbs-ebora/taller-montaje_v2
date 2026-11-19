@@ -103,3 +103,70 @@
 .av-zonas { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
 .av-zonas .chip { cursor: pointer; border: 1px solid var(--linea); font-family: var(--f-texto); font-size: 14px; }
 .av-zonas .chip:hover:not(:disabled) { border-color: var(--tinta); }
+
+/* Enlace desde una lección a una animación de «Por dentro» */
+a.enlace-anim { text-decoration: none; color: inherit; }
+a.enlace-anim .ic { background: var(--naranja, #ff6a3d); font-size: 15px; }
+
+/* Variante de la pieza (polímetro manual o autorango) */
+.pd-variantes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; font: 700 14px var(--f-texto); color: var(--tinta-2); }
+.pd-variantes .am-btn { padding: 4px 10px; font-size: 14px; }
+.pd-variantes .am-btn[aria-pressed="true"] { background: var(--c-tinta, #1d1b24); color: #fff; }
+
+/* Práctica «¿Está bien la fuente?»: tabla de medidas */
+.av-tabla { width: 100%; border-collapse: collapse; font-size: 15px; margin-top: 10px; }
+.av-tabla th, .av-tabla td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--linea); }
+.av-tabla th { color: var(--tinta-2); font-size: 13px; }
+.av-tabla td.ok { color: var(--bien); font-weight: 700; } .av-tabla td.ko { color: var(--mal); font-weight: 700; }
+.av-paso .variantes { margin: 0; }
+
+/* Informe del alumno al final de las prácticas */
+.informe { display: grid; gap: 8px; margin-bottom: 12px; }
+.informe label { display: grid; gap: 3px; font: 700 14px var(--f-texto); color: var(--tinta-2); }
+.informe textarea { font: 400 16px/1.4 var(--f-texto); color: var(--tinta); padding: 8px 10px; border: 2px solid var(--linea); border-radius: 10px; background: var(--superficie); resize: vertical; }
+.informe textarea:focus { outline: 3px solid var(--azul); outline-offset: 1px; }
+.informe-comparado { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.informe-comparado > div { border: 2px solid var(--linea); border-radius: 10px; padding: 10px 12px; }
+.informe-comparado h4 { margin: 0 0 6px; font-size: 15px; }
+.informe-comparado dl { margin: 0; font-size: 15px; } .informe-comparado dt { font-weight: 700; color: var(--tinta-2); margin-top: 6px; } .informe-comparado dd { margin: 0; white-space: pre-wrap; }
+@media (max-width: 700px) { .informe-comparado { grid-template-columns: 1fr; } }
+.av-juicio { display: inline-flex; gap: 4px; }
+.av-juicio button { font: 700 13px var(--f-texto); padding: 3px 8px; border-radius: 999px; border: 2px solid var(--linea); background: var(--papel); cursor: pointer; }
+.av-juicio button[aria-pressed="true"] { border-color: var(--tinta); background: var(--tinta); color: var(--papel); }
+.av-juicio button.ok { border-color: var(--bien); background: var(--bien); } .av-juicio button.ko { border-color: var(--mal); background: var(--mal); }
+
+.pd-figura { margin: 0; font-weight: 700; font-size: 16px; }
+
+/* Reto de clase de «Este PC no arranca» */
+.av-marcador { display: inline-block; margin: 0 0 14px; padding: 8px 14px; font: 700 18px/1.2 var(--f-mono); background: var(--ambar-2); color: var(--tinta); border: 2.5px solid var(--tinta); border-radius: 10px; box-shadow: 3px 3px 0 var(--tinta); }
+.av-reto { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-top: 26px; padding: 16px 18px; border: 2px dashed var(--tinta-2); border-radius: 14px; }
+.av-reto span { flex: 1 1 280px; color: var(--tinta-2); }
+.av-reto input { width: 120px; padding: 10px 12px; font: 700 18px var(--f-mono); border: 2px solid var(--tinta); border-radius: 10px; }
+.av-final { margin-top: 16px; padding: 16px 18px; background: var(--ambar-2); border: 3px solid var(--tinta); border-radius: 14px; }
+.av-final h3 { margin: 0 0 6px; }
+.av-final-nota { font-size: 26px; margin: 0 0 10px; }
+.av-final ol { margin: 0 0 12px; padding-left: 22px; }
+
+/* Monitor del equipo averiado, en una esquina del 3D */
+.av-monitor { position: absolute; right: 12px; bottom: 46px; width: 150px; pointer-events: none; }
+.av-monitor-pantalla { display: grid; place-items: center; aspect-ratio: 16 / 10; padding: 6px; border: 5px solid #1d1b24; border-radius: 6px; background: #05060a; color: #d7dbe2; font: 600 11px/1.25 var(--f-mono); text-align: center; overflow: hidden; }
+.av-monitor-pie { width: 44px; height: 9px; margin: 0 auto; background: #1d1b24; border-radius: 0 0 6px 6px; }
+.av-monitor.sin .av-monitor-pantalla { color: #8fa3c7; }
+.av-monitor.imagen .av-monitor-pantalla { background: linear-gradient(135deg, #2b62b8, #6aa5ff); color: #fff; font-size: 13px; }
+.av-monitor.texto .av-monitor-pantalla { color: #f2f2f2; font-size: 10px; }
+@media (max-width: 960px) { .av-monitor { width: 110px; } }
+
+/* Práctica «Cablea el equipo» */
+.cb-lista { display: grid; gap: 8px; }
+.cb-cable { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border: 2px solid var(--linea); border-radius: 12px; background: var(--superficie); }
+.cb-cable.cogido { border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-2); }
+.cb-cable.puesto { background: var(--bien-2); border-color: var(--bien); }
+.cb-cable b { display: block; font-size: 15.5px; line-height: 1.25; }
+.cb-cable small { color: var(--tinta-2); font-size: 13.5px; }
+.cb-muestra { width: 12px; height: 34px; border-radius: 6px; border: 1.5px solid var(--tinta); }
+.cb-mini { padding: 6px 12px; font-size: 14.5px; }
+.cb-forzar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.cb-pasa { margin: 12px 0 0; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--tinta); background: var(--ambar-2); font-weight: 600; }
+.cb-pasa.bien { background: var(--bien-2); border-color: var(--bien); }
+.cb-pasa.averia { background: var(--mal-2); border-color: var(--mal); }
+.cb-solucion { margin: 4px 0 14px; padding-left: 20px; display: grid; gap: 4px; font-size: 15.5px; }

@@ -8,14 +8,19 @@ export const PRACTICAS = [
     texto: 'Te llega un cliente con un encargo. Elige piezas compatibles que cumplan lo que pide y ordena el montaje con todas las medidas de seguridad.' },
   { id: 't3-averia', temas: 'Tema 3', titulo: 'Este PC no arranca', ruta: '#/tema3/practica',
     texto: 'Un equipo recién montado que no funciona. Mira el síntoma y los LED de la placa, inspecciónalo en 3D y encuentra qué está mal montado.' },
+  { id: 't3-cablea', temas: 'Tema 3', titulo: 'Cablea el equipo', ruta: '#/tema3/cablea',
+    texto: 'Las piezas están montadas, pero falta conectar todos los cables. Lleva cada cable a su conector, enchufa, enciende y mira qué hace el equipo.' },
+  { id: 't4-medir', temas: 'Tema 4', titulo: '¿Está bien la fuente?', ruta: '#/tema4/practica',
+    texto: 'Te traen un equipo con un problema. Prepara el polímetro, mide por detrás del conector de 24 pines y decide si la culpa es de la fuente.' },
 ];
 
 export const EXAMENES = [
   { id: 't1t2', temas: 'Temas 1 y 2', titulo: 'Examen Temas 1 y 2', subtitulo: 'Elegir las piezas de un PC para un cliente', ruta: '#/tema1/examen' },
+  { id: 't3t4', temas: 'Temas 3 y 4', titulo: 'Examen Temas 3 y 4', subtitulo: 'Dos equipos que no arrancan y dos fuentes que hay que medir con el polímetro', ruta: '#/tema3/examen' },
 ];
 
 // Configuración de cada examen. El de los Temas 1 y 2 sigue usando EXAMEN_ACTIVO y URL_SCRIPT de config.js;
-// los nuevos se añaden en config.js con  export const EXAMENES = { t3: { activo: true, url: '…/exec' } }
+// los nuevos se añaden en config.js con  export const EXAMENES = { t3t4: { activo: true, url: '…/exec' } }
 export function configExamen(id) {
   const nuevo = CFG.EXAMENES && CFG.EXAMENES[id];
   if (nuevo) return { activo: !!nuevo.activo, url: nuevo.url || '' };

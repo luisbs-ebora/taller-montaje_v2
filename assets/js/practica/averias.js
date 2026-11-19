@@ -24,6 +24,12 @@ export const ZONAS = {
   pila: { nombre: 'Pila de la placa', partes: ['pila', 'bios'], bien: 'La pila CR2032 marca unos 3 V: está bien.' },
   cpu: { nombre: 'Procesador', partes: ['socket', 'sustrato', 'ihs', 'triangulo'], bien: 'El procesador está bien asentado y la palanca del zócalo, cerrada.' },
 };
+// La práctica tiene una fase y una zona más que no se ven en el 3D. Van aparte porque FASES y ZONAS
+// también las usa la página del examen de los temas 3 y 4, que no debe cambiar.
+export const FASES_PRACTICA = { ...FASES, despues: 'Arranca y funciona: el fallo sale después, al comprobar el equipo' };
+export const ZONAS_PRACTICA = { ...ZONAS,
+  papeles: { nombre: 'Hoja de montaje (configuración de la UEFI)', partes: [], bien: 'Según la hoja de montaje, en la UEFI están: la fecha y la hora bien, el perfil XMP activado, el TPM y el arranque seguro activados, el modo SATA en AHCI y el disco del sistema el primero en el orden de arranque.' },
+};
 export function zonaDeParte(parte) {
   for (const [id, z] of Object.entries(ZONAS)) if (z.partes.includes(parte)) return id;
   return null;
@@ -65,6 +71,25 @@ export const FALLOS = [
   { id: 'pila', zona: 'pila', fase: ['reposo'], sintoma: 'Funciona bien, pero cada vez que se desenchufa por la noche, al día siguiente la fecha y la hora han vuelto a 2020.', ventiladores: true, pantalla: 'Arranca normal (con la fecha mal)', led: null,
     mal: 'La pila CR2032 marca 2,1 V: está agotada (nueva tiene unos 3 V).',
     causa: 'La pila de la placa (CR2032) está agotada', solucion: 'Cambiar la pila CR2032 con el equipo desenchufado y volver a poner la fecha y la hora en la UEFI.' },
+  // --- Arranca, pero algo está mal configurado o mal montado: se descubre en las comprobaciones (Sección 3, apartado 7.2, y Sección 4, apartados 2 y 5) ---
+  { id: 'velram', zona: 'papeles', fase: ['despues'], sintoma: 'Arranca y funciona bien. Al hacer las comprobaciones, el Administrador de tareas (Rendimiento → Memoria) marca «Velocidad: 4800 MHz». La etiqueta de los módulos dice DDR5-6000.', ventiladores: true, pantalla: 'Arranca normal', led: null,
+    mal: 'En la hoja de montaje, el perfil XMP figura como desactivado: la memoria trabaja a su velocidad básica, no a la de su etiqueta.',
+    causa: 'El perfil de memoria (XMP o EXPO) está sin activar en la UEFI', solucion: 'Entrar en la UEFI (Supr o F2), activar el perfil XMP o EXPO y guardar con F10. Después, comprobar otra vez la velocidad.' },
+  { id: 'cmos', zona: 'papeles', fase: ['post'], sintoma: 'Ayer funcionaba. Alguien entró en la UEFI y cambió la frecuencia de la memoria. Desde entonces se reinicia una y otra vez sin dar imagen, y no deja entrar en la UEFI.', ventiladores: true, pantalla: 'Sin señal', led: 'DRAM',
+    mal: 'En la hoja de montaje alguien ha apuntado: «frecuencia de la memoria puesta a mano en 7200 MHz». La etiqueta de los módulos dice DDR5-6000.',
+    causa: 'La memoria está configurada en la UEFI a una frecuencia que no admite', solucion: 'Con el equipo desenchufado, borrar la CMOS con el puente CLR_CMOS de la placa o quitando la pila unos minutos, como indique el manual. La UEFI vuelve a sus valores por defecto y el equipo arranca. Después se activa el perfil XMP, que pone la frecuencia de la etiqueta.' },
+  { id: 'canal', zona: 'ram', fase: ['despues'], sintoma: 'Arranca y detecta los 16 GB. Al hacer las comprobaciones, CPU-Z dice que la memoria trabaja en un solo canal (Single).', ventiladores: true, pantalla: 'Arranca normal', led: null,
+    mal: 'Los dos módulos están en A1 y A2, uno al lado del otro. El manual de la placa pide A2 y B2.',
+    causa: 'Los módulos de memoria no están en las ranuras que indica el manual', solucion: 'Con el equipo desenchufado, cambiar un módulo de ranura para que queden en A2 y B2, y comprobar que CPU-Z marca doble canal (Dual).' },
+  { id: 'tpm', zona: 'papeles', fase: ['despues'], sintoma: 'Arranca desde el USB de instalación, pero el instalador de Windows 11 se para con un mensaje y no deja seguir. Según el manual, el procesador y la placa admiten Windows 11.', ventiladores: true, pantalla: 'Este equipo no puede ejecutar Windows 11', led: null,
+    mal: 'En la hoja de montaje, el TPM (Intel PTT) figura como desactivado. Windows 11 lo exige.',
+    causa: 'El TPM está desactivado en la UEFI', solucion: 'Entrar en la UEFI, activar el TPM (Intel PTT o AMD fTPM), comprobar que el arranque seguro también está activado y guardar con F10.' },
+  { id: 'calor', zona: 'disipador', fase: ['despues'], sintoma: 'Arranca y da imagen. Al entrar en la UEFI, la temperatura del procesador pasa de 85 °C en un minuto, sin hacer nada.', ventiladores: true, pantalla: 'Da imagen (UEFI)', led: null,
+    mal: 'El disipador se mueve al tocarlo: dos de sus tornillos están sin apretar y la base no asienta sobre el procesador. Su ventilador sí está en CPU_FAN.',
+    causa: 'El disipador está mal colocado: no asienta sobre el procesador', solucion: 'Apagar enseguida. Quitar el disipador, limpiar la pasta, poner pasta nueva y volver a montarlo apretando todos sus tornillos.' },
+  { id: 'pled', zona: 'fpanel', fase: ['despues'], sintoma: 'Arranca y funciona bien, pero la luz de encendido del frontal de la caja no se enciende nunca.', ventiladores: true, pantalla: 'Arranca normal', led: null,
+    mal: 'El conector POWER LED está al revés: el hilo + está en la patilla PLED−. POWER SW sí está en su sitio.',
+    causa: 'El cable POWER LED está conectado al revés', solucion: 'Dar la vuelta al conector POWER LED para que el + quede en la patilla PLED+ del dibujo del manual.' },
 ];
 
 const EQUIPOS = ['PC de recepción', 'Equipo del aula 4', 'PC de la secretaría', 'Equipo de diseño', 'PC del almacén', 'Equipo del profesor', 'PC de la biblioteca', 'Equipo de la sala de reuniones'];
@@ -84,6 +109,17 @@ export function crearCaso(semilla, { excluir } = {}) {
   return { semilla, equipo: EQUIPOS[Math.floor(r() * EQUIPOS.length)], conGpu, fallo, causas };
 }
 
+// Reto de clase: con el mismo número, todos reciben los mismos equipos, en el mismo orden y sin repetir avería
+export function crearReto(codigo, cuantos = 5) {
+  const casos = [], usados = new Set();
+  for (let i = 0; casos.length < cuantos && i < 500; i++) {
+    const c = crearCaso((codigo * 7919 + i * 104729) % 2147483647 + 1);
+    if (!usados.has(c.fallo.id)) { usados.add(c.fallo.id); casos.push(c); }
+  }
+  return casos;
+}
+
+export const TOPE_CRITICO = 4;
 // Puntos: fase (1), seguridad antes de abrir (1), revisar la zona del fallo (1), causa (2) → sobre 5, nota sobre 10
 export function corregir(caso, { fase, seguridadAntes, revisadas, causa }) {
   const p = {
@@ -93,7 +129,18 @@ export function corregir(caso, { fase, seguridadAntes, revisadas, causa }) {
     causa: causa === caso.fallo.id ? 2 : 0,
   };
   const total = p.fase + p.seguridad + p.zona + p.causa;
-  return { puntos: p, total, nota: Math.round(total * 20) / 10 };
+  // Fallos críticos: tocar dentro sin las medidas de seguridad o dejar el equipo sin arreglar. Con cualquiera de los dos, como mucho un 4.
+  const criticos = [];
+  if (!p.seguridad) criticos.push('Has tocado dentro del equipo sin apagar, desenchufar y ponerte la pulsera.');
+  if (!p.causa) criticos.push('El equipo sigue sin arreglar: la causa no era esa.');
+  const nota = Math.round(total * 20) / 10;
+  return { puntos: p, total, criticos, nota: criticos.length ? Math.min(nota, TOPE_CRITICO) : nota };
+}
+
+/** Informe de referencia por campos, para compararlo con el del alumno. */
+export function informeReferencia(caso) {
+  const f = caso.fallo;
+  return { incidencia: f.sintoma + (f.led ? ` LED ${f.led} encendido.` : ''), comprobaciones: f.mal, causa: f.causa + '.', solucion: f.solucion };
 }
 
 export function informe(caso) {
