@@ -17,6 +17,8 @@ export const CABLES = {
   fancpu: { nombre: 'Cable del ventilador del disipador', de: 'disipador', forma: 'fan', pista: 'Sale del ventilador del disipador.' },
   fancaja: { nombre: 'Cable de los ventiladores de la caja', de: 'caja', forma: 'fan', pista: 'Sale de los ventiladores del frontal.' },
   frontal: { nombre: 'Cables del frontal: POWER SW, RESET SW, POWER LED y HDD LED', de: 'frontal', forma: 'fpanel', pista: 'Salen del frontal de la caja.' },
+  usbf: { nombre: 'USB 3 del frontal (conector azul)', de: 'frontal', forma: 'usb3', pista: 'Sale del frontal de la caja.' },
+  video: { nombre: 'Cable del monitor (HDMI)', de: 'monitor', forma: 'video', pista: 'Ya está puesto en el monitor: falta el otro extremo.' },
 };
 
 // Conectores del equipo. «partes» son las piezas del 3D que valen para tocarlo.
@@ -29,19 +31,20 @@ export const DESTINOS = {
   fpanel: { nombre: 'F_PANEL (placa, abajo a la derecha)', forma: 'fpanel', partes: ['fpanel'] },
   sata1: { nombre: 'Puerto SATA 1 (placa)', forma: 'satad', partes: ['sata'] },
   disco: { nombre: 'Conector de alimentación del disco', forma: 'satac', partes: ['ssd25'] },
+  usb3: { nombre: 'USB3 (cabezal azul de la placa)', forma: 'usb3', partes: [] },
+  vgpu: { nombre: 'HDMI de la tarjeta gráfica', forma: 'video', partes: [] },
+  vplaca: { nombre: 'HDMI de la placa', forma: 'video', partes: [] },
 };
 export function destinoDeParte(parte, caso) { return caso.destinos.find(d => DESTINOS[d].partes.includes(parte)) || null; }
 
-/** Un equipo sin cablear. Cambia si lleva gráfica y si el disco es SATA o M.2: según eso sobran cables. */
+/** Un equipo sin cablear. Cambia si lleva gráfica y si lleva disco SATA además del SSD M.2: según eso sobran cables. */
 export function crearCaso(semilla) {
   const r = azar(semilla);
-  const conGpu = r() < 0.6, m2 = r() < 0.35;
+  const conGpu = r() < 0.65, hdd = r() < 0.65;
   // de la fuente salen siempre todos sus cables: en algunos equipos sobra alguno
-  const cables = ['atx24', 'eps', 'pcie', 'satac', ...(m2 ? [] : ['satad']), 'fancpu', 'fancaja', 'frontal'];
-  const destinos = ['atx24', 'eps', ...(conGpu ? ['gpu'] : []), 'cpufan', 'chafan', 'fpanel', 'sata1', ...(m2 ? [] : ['disco'])];
-  // el orden en que se enseñan no da pistas
-  const baraja = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  return { semilla, conGpu, m2, cables: baraja(cables), destinos: baraja(destinos) };
+  const cables = ['atx24', 'eps', 'pcie', 'satac', ...(hdd ? ['satad'] : []), 'fancpu', 'fancaja', 'frontal', 'usbf', 'video'];
+  const destinos = ['atx24', 'eps', ...(conGpu ? ['gpu'] : []), 'cpufan', 'chafan', 'fpanel', 'usb3', 'sata1', ...(hdd ? ['disco'] : []), ...(conGpu ? ['vgpu'] : []), 'vplaca'];
+  return { semilla, conGpu, hdd, m2: !hdd, cables, destinos };
 }
 
 export const estadoInicial = () => ({ conex: {}, forzados: [], enchufado: false, intentos: [], criticos: [], terminado: false });
@@ -98,6 +101,10 @@ export function arrancar(caso, estado) {
     texto: 'Los ventiladores giran, pero el monitor no muestra nada. En la placa se queda encendido el LED VGA.' };
   if (!cableEn(estado, 'cpufan')) return { tipo: 'post', arranca: false, giran, led: null, luz: true, pantalla: 'CPU Fan Error! Press F1 to Run SETUP', falta: 'fancpu',
     texto: 'Da imagen, pero se para con un mensaje: la placa no detecta ningún ventilador en CPU_FAN.' };
+  // El equipo ya funciona por dentro. ¿Llega la imagen al monitor? Con gráfica dedicada, las salidas de la placa no dan imagen.
+  const salida = caso.conGpu ? 'vgpu' : 'vplaca';
+  if (en('video') !== salida) return { tipo: 'post', arranca: false, giran, led: null, luz: true, pantalla: 'Sin señal', falta: en('video') ? 'videoplaca' : 'video',
+    texto: 'Los ventiladores giran y no se queda encendido ningún LED de error, pero el monitor no muestra nada.' };
   if (!caso.m2 && (en('satad') !== 'sata1' || en('satac') !== 'disco')) return { tipo: 'arranque', arranca: false, giran, led: 'BOOT', luz: true, pantalla: 'Reboot and select proper boot device', falta: en('satad') !== 'sata1' ? 'satad' : 'satac',
     texto: 'Pasa el POST, pero se para con un mensaje: no encuentra ningún disco del que arrancar. En la placa se queda encendido el LED BOOT.' };
   // Arranca. Queda por ver si los ventiladores están donde deben.
@@ -109,6 +116,8 @@ export function arrancar(caso, estado) {
       texto: cruzados ? 'Arranca y da imagen. Pero al mirar dentro, la placa regula los ventiladores de la caja con la temperatura del procesador, y el del disipador va por su cuenta.'
         : 'Arranca y da imagen. Pero al mirar dentro, los ventiladores de la caja están parados.' };
   }
+  if (en('usbf') !== 'usb3') return { tipo: 'casi', arranca: true, giran, led: null, luz: true, pantalla: 'Arranca normal', falta: 'usbf',
+    texto: 'Arranca y da imagen. Pero al probar un pendrive en el frontal de la caja, no lo reconoce.' };
   return { tipo: 'bien', arranca: true, giran, led: null, luz: true, pantalla: 'Arranca normal', texto: 'Arranca, da imagen y giran todos los ventiladores.' };
 }
 
@@ -122,6 +131,9 @@ const EXPLICA = {
   satac: 'Faltaba el cable SATA de alimentación en el disco.',
   fancaja: 'Los ventiladores de la caja van en CHA_FAN.',
   cruzados: 'Estaban cruzados: el del disipador va en CPU_FAN y los de la caja en CHA_FAN.',
+  video: 'Faltaba el cable del monitor.',
+  videoplaca: 'El monitor estaba conectado a la placa: con tarjeta gráfica, va a la salida de la tarjeta.',
+  usbf: 'Faltaba el cable USB del frontal en su cabezal azul de la placa.',
 };
 export const explica = r => EXPLICA[r.falta] || '';
 
@@ -148,7 +160,7 @@ export function puntuar(estado) {
 
 /** Cableado correcto de un caso, para las pruebas y para enseñarlo al terminar. */
 export function solucion(caso) {
-  const s = { atx24: 'atx24', eps: 'eps', fancpu: 'cpufan', fancaja: 'chafan', frontal: 'fpanel' };
+  const s = { atx24: 'atx24', eps: 'eps', fancpu: 'cpufan', fancaja: 'chafan', frontal: 'fpanel', usbf: 'usb3', video: caso.conGpu ? 'vgpu' : 'vplaca' };
   if (caso.conGpu) s.pcie = 'gpu';
   if (!caso.m2) { s.satad = 'sata1'; s.satac = 'disco'; }
   return s;

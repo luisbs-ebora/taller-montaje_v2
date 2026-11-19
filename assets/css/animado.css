@@ -163,3 +163,23 @@
 @media (prefers-reduced-motion: reduce) {
   .am-escena *, .am-escena *::before, .am-escena *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Práctica «Cablea el equipo» (misma mesa que el montaje animado) */
+.cb-panel { width: 262px; }
+.cb-estado { list-style: none; margin: 8px 0 10px; padding: 0; display: grid; gap: 4px; }
+.cb-estado button { display: grid; grid-template-columns: 12px 1fr; gap: 0 8px; width: 100%; text-align: left; padding: 5px 8px; font: inherit; color: var(--c-tinta); background: transparent; border: 2px solid transparent; border-radius: 10px; cursor: pointer; }
+.cb-estado button:hover { border-color: var(--c-tinta); background: #fff; }
+.cb-estado i { grid-row: 1 / span 2; width: 12px; height: 28px; align-self: center; border: 2px solid var(--c-tinta); border-radius: 6px; }
+.cb-estado span { font-weight: 700; font-size: 14.5px; line-height: 1.2; }
+.cb-estado small { font-size: 12.5px; color: var(--c-gris); }
+.cb-estado li.puesto small { color: #1f7a45; font-weight: 700; }
+.cb-panel > .am-btn { width: 100%; }
+.cb-pasa2 { margin: 10px 2px 4px; font-size: 14.5px; line-height: 1.35; font-weight: 600; }
+.cb-pasa2:empty { display: none; }
+.cb-forzar2 { display: grid; gap: 6px; margin: 0 0 10px; padding: 8px; background: var(--c-amarillo); border: 2.5px solid var(--c-tinta); border-radius: 12px; }
+.cb-forzar2[hidden] { display: none; }
+.cb-forzar2 p { margin: 0; font-size: 14px; }
+.cb-rotulos[hidden] { display: none; }
+.am-burbuja.cb-rotulo span { animation: none; font: 700 11.5px var(--f-mono); padding: 2px 6px; border-width: 1.5px; box-shadow: none; background: rgba(255, 250, 240, .92); border-radius: 6px; }
+.am-burbuja.cb-rotulo.cerca span { background: var(--c-naranja); color: #fff; font-size: 14px; }
+@media (max-width: 820px) { .cb-panel { position: static; width: auto; max-height: none; border-radius: 0; border-width: 3px 0 0; box-shadow: none; } .am-escena:has(.cb-panel) { height: auto; } .am-escena:has(.cb-panel) .am-lienzo { height: 62vh; } }
