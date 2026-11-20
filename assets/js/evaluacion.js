@@ -10,6 +10,10 @@ export const PRACTICAS = [
     texto: 'Un equipo recién montado que no funciona. Mira el síntoma y los LED de la placa, inspecciónalo en 3D y encuentra qué está mal montado.' },
   { id: 't3-cablea', temas: 'Tema 3', titulo: 'Cablea el equipo', ruta: '#/tema3/cablea',
     texto: 'Las piezas están montadas, pero falta conectar todos los cables. Lleva cada cable a su conector, enchufa, enciende y mira qué hace el equipo.' },
+  { id: 't3-repara', temas: 'Tema 3 · prueba A', titulo: 'Repara el equipo', ruta: '#/tema3/repara',
+    texto: 'Prueba. El equipo llega cableado y con una avería. Míralo, enciéndelo, entrega el diagnóstico y después arréglalo con tus manos en la misma mesa.' },
+  { id: 't3-completa', temas: 'Tema 3 · prueba B', titulo: 'Cablea y repara', ruta: '#/tema3/cablea-y-repara',
+    texto: 'Prueba. Las dos prácticas seguidas en el mismo equipo: primero lo cableas hasta que arranca y, cuando lo entregas, vuelve al taller con una avería.' },
   { id: 't4-medir', temas: 'Tema 4', titulo: '¿Está bien la fuente?', ruta: '#/tema4/practica',
     texto: 'Te traen un equipo con un problema. Prepara el polímetro, mide por detrás del conector de 24 pines y decide si la culpa es de la fuente.' },
 ];

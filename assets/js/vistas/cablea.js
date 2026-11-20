@@ -1,6 +1,8 @@
-// cablea.js — Práctica «Cablea el equipo». Es la mesa del montaje animado, pero los cables los pone el alumno:
-// coge la clavija de un cable, la arrastra por encima del equipo y la suelta en un conector.
-// Al soltarla donde toca, el cable se tiende por el mismo recorrido que en el montaje animado.
+// cablea.js — La mesa del montaje animado, pero con las manos del alumno. Tres prácticas en la misma escena:
+//  · 'cablea'   «Cablea el equipo»: coge la clavija de cada cable, la arrastra y la suelta en su conector.
+//  · 'repara'   «Repara el equipo» (prueba): el equipo llega cableado y con una avería. Diagnóstico y reparación a mano.
+//  · 'completa' «Cablea y repara» (prueba): primero se cablea; después vuelve al taller con una avería.
+// Al soltar una clavija donde toca, el cable se tiende por el mismo recorrido que en el montaje animado.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { h, md } from '../util.js';
@@ -8,6 +10,7 @@ import { construirPiezas, CAJA } from '../animado/piezas.js';
 import { TINTA, cambiarGeometria } from '../animado/toon.js';
 import { animar, esperar, ease, alMomento, actualizarAnimaciones, cancelarAnimaciones } from '../animado/anim.js';
 import { CABLES, DESTINOS, crearCaso, estadoInicial, cableEn, conectar, quitar, encender, apagar, explica, puntuar, solucion, TOPE_CRITICO } from '../practica/cablea.js';
+import { PIEZAS, crearAveria, estadoAveriado, manoProhibida, alSacar, tocar, encenderBanco, diagnosticar, entregar, puntuarReparacion } from '../practica/repara.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const GRIS = 0x454b62;
@@ -24,7 +27,17 @@ const ETIQUETA = { atx24: 'ATX_24P', eps: 'CPU_PWR', gpu: 'Alimentación de la g
 const CORTO = { atx24: 'ATX 24 pines', eps: '8 pines «CPU»', pcie: '8 pines «PCIe»', satac: 'SATA alimentación', satad: 'SATA datos', fancpu: 'Ventilador del disipador',
   fancaja: 'Ventiladores de la caja', frontal: 'Cables del frontal', usbf: 'USB del frontal', video: 'Cable del monitor' };
 
-export function vistaCablea() {
+const TEXTOS = {
+  cablea: { etiqueta: 'Práctica · Tema 3 · no cuenta para nota', titulo: 'Cablea el equipo',
+    lead: 'El equipo está montado, pero sin un solo cable puesto. Coge cada clavija, llévala a su conector y, cuando creas que está todo, enchufa y enciende.' },
+  repara: { etiqueta: 'Prueba A · Tema 3 · no cuenta para nota', titulo: 'Repara el equipo',
+    lead: 'Te traen un equipo al taller. Míralo por todos lados, enciéndelo si hace falta y entrega el diagnóstico. Después arréglalo con tus manos y comprueba que arranca.' },
+  completa: { etiqueta: 'Prueba B · Tema 3 · no cuenta para nota', titulo: 'Cablea y repara',
+    lead: 'Primero cableas el equipo y lo dejas funcionando. Cuando lo entregues, volverá al taller con una avería: tendrás que diagnosticarla y repararla en ese mismo equipo.' },
+};
+
+export function vistaCablea(modo = 'cablea') {
+  const T = TEXTOS[modo];
   /* ---------- Interfaz ---------- */
   const lienzo = h('canvas.am-lienzo', { 'aria-label': 'Mesa de montaje en 3D: arrastra la clavija de cada cable hasta su conector.' });
   const pista = h('p.am-pista', 'Arrastra la clavija de un cable hasta su conector · arrastra el fondo para girar · rueda para acercar');
@@ -37,7 +50,11 @@ export function vistaCablea() {
   const bEncender = h('button.am-btn.am-principal', { type: 'button' });
   const bNombres = h('button.am-btn', { type: 'button', 'aria-pressed': 'true' }, 'Nombres de los conectores');
   const forzar = h('div.cb-forzar2', { hidden: true });
-  const panel = h('aside.am-panel.cb-panel', h('div.am-panel-cab', h('h2', 'Cables')), lista, forzar, bEncender, h('p.am-nota.cb-pasa2'));
+  const parteEl = h('div.cb-parte', { hidden: true });
+  const bSeguir = h('button.am-btn.am-principal', { type: 'button', hidden: true }, 'Entregar el equipo al cliente');
+  const bEntregar = h('button.am-btn', { type: 'button', hidden: true }, 'Dar el equipo por terminado');
+  const tituloPanel = h('h2', 'Cables');
+  const panel = h('aside.am-panel.cb-panel', h('div.am-panel-cab', tituloPanel), parteEl, forzar, bEncender, bSeguir, h('p.am-nota.cb-pasa2'), lista, bEntregar);
   const pasa = panel.querySelector('.cb-pasa2');
   const escenaEl = h('div.am-escena', lienzo, capaRotulos, capaBurbujas, tooltip, aviso, pista, panel, sin3d);
   const resultadoEl = h('div');
@@ -46,8 +63,7 @@ export function vistaCablea() {
   const bOtro = h('button.btn.sec', { type: 'button', onclick: () => nuevo() }, 'Otro equipo');
   const el = h('div.animado',
     h('div.am-cab',
-      h('div', h('span.etiqueta', 'Práctica · Tema 3 · no cuenta para nota'), h('h1', 'Cablea el equipo'),
-        h('p.lead', 'El equipo está montado, pero sin un solo cable puesto. Coge cada clavija, llévala a su conector y, cuando creas que está todo, enchufa y enciende.')),
+      h('div', h('span.etiqueta', T.etiqueta), h('h1', T.titulo), h('p.lead', T.lead)),
       h('div.fila', bVista, bDetras, bNombres, bOtro)),
     escenaEl, resultadoEl);
 
@@ -55,6 +71,8 @@ export function vistaCablea() {
   let renderer, escena, camara, controles, raiz, ro;
   let P = {}, caso, estado, ultimo = null, encendido = false, generacion = 0, verNombres = true;
   let cables = {}, destinos = {}, arrastre = null, detalle = [];
+  // fase: 'cablear' (poner cables) o 'reparar' (hay una avería). av: la avería. notaA: nota del cableado en «Cablea y repara».
+  let fase = 'cablear', av = null, notaA = null, anterior = null, causaElegida = '', toque = null, tocables = [], base = null;
   const burbujas = [], rotulos = [], temporizadores = new Set();
   const VISTA = { pos: V(-36, 108, 60), obj: V(-46, 2, -6) };
   const ray = new THREE.Raycaster(), raton = new THREE.Vector2(), proy = new THREE.Vector3();
@@ -152,7 +170,11 @@ export function vistaCablea() {
     cancelarAnimaciones();
     if (raiz) { escena.remove(raiz); raiz.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
     burbujas.splice(0).forEach(b => b.el.remove()); rotulos.splice(0).forEach(b => b.el.remove());
-    caso = crearCaso(Math.floor(Math.random() * 2147483647)); estado = estadoInicial(); ultimo = null; encendido = false; detalle = [];
+    const semilla = Math.floor(Math.random() * 2147483647), pedida = new URLSearchParams(location.search).get('averia');
+    av = null; notaA = null; causaElegida = ''; fase = modo === 'repara' ? 'reparar' : 'cablear';
+    if (modo === 'repara') { av = crearAveria(semilla, { excluir: anterior, forzar: pedida }); anterior = av.id; caso = av.caso; estado = estadoAveriado(av); }
+    else { caso = crearCaso(semilla); estado = estadoInicial(); }
+    ultimo = null; encendido = false; detalle = [];
     resultadoEl.replaceChildren(); forzar.hidden = true; pasa.textContent = '';
     raiz = new THREE.Group(); escena.add(raiz);
     P = construirPiezas();
@@ -162,12 +184,13 @@ export function vistaCablea() {
     if (mia !== generacion) return;
     // Fuera lo que no se usa aquí y todos los cables que tendió el montaje: los pone el alumno
     for (const id of ['pulsera', 'c24', 'eps', 'frontal', 'revisar', 'enchufe', ...(caso.hdd ? [] : ['hdd']), ...(caso.conGpu ? [] : ['gpu'])]) { P[id].grupo.visible = false; P[id].fijo.visible = false; }
-    for (const id of ['hdd', 'gpu', 'monitor']) P[id].fijo.clear();
+    for (const id of ['hdd', 'gpu', 'monitor', 'wifi']) P[id].fijo.clear(); // (el cable Bluetooth de la wifi cruzaba por encima del conector de la gráfica y despistaba)
     P.placa.cableFan.geometry.setDrawRange(0, 0);
     for (const p of Object.values(P)) if (p.rotores) p.velocidad = 0;
     if (P.ventiladores.aire) P.ventiladores.aire(null);
     prepararCables();
-    if (new URLSearchParams(location.search).has('prueba')) window.__cablea = { cables, destinos, camara, lienzo, caso, estado };
+    if (modo !== 'cablea') sincronizar();
+    if (new URLSearchParams(location.search).has('prueba')) window.__cablea = { cables, destinos, camara, lienzo, caso, get estado() { return estado; }, get av() { return av; }, get fase() { return fase; }, get tocables() { return tocables; }, get P() { return P; }, controles };
     ambientar(null);
     pintar();
     irA(VISTA.pos, VISTA.obj, 600);
@@ -225,6 +248,34 @@ export function vistaCablea() {
       capaRotulos.append(elr); rotulos.push({ el: elr, pos: destinos[d].clone().add(V(0, 1.2, 0)), rotulo: true, d });
     }
     capaRotulos.hidden = !verNombres;
+    // Piezas que se tocan con la mano en las reparaciones, y cómo están cuando están bien puestas
+    const pila = P.placa.cuerpo.children.find(o => Math.abs(o.position.x - 8.5) < 0.01 && Math.abs(o.position.z - 4) < 0.01);
+    tocables = [{ id: 'ram', obj: P.ram.grupo }, { id: 'disipador', obj: P.disipador.grupo }, { id: 'pila', obj: pila }, { id: 'interruptor', obj: P.fuente.interruptor }];
+    // marcas I y O junto al interruptor de la fuente, como las que lleva serigrafiadas
+    const blanco = new THREE.MeshBasicMaterial({ color: 0xffffff }), fc = P.fuente.cuerpo;
+    const marcaI = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.55, 0.14), blanco); marcaI.position.set(-7.06, -0.45, -0.2);
+    const marcaO = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.06, 6, 16), blanco); marcaO.rotation.y = Math.PI / 2; marcaO.position.set(-7.06, -2.75, -0.2);
+    fc.add(marcaI, marcaO);
+    base = { ramP: P.ram.grupo.position.clone(), ramQ: P.ram.grupo.quaternion.clone(), disP: P.disipador.grupo.position.clone(), disQ: P.disipador.grupo.quaternion.clone() };
+  }
+  // Pone el equipo como dice el estado, sin animar: cables en su conector (o sueltos) y piezas bien o mal puestas
+  function sincronizar() {
+    for (const c of Object.values(cables)) {
+      if (c.tendido) { raiz.remove(c.tendido); c.tendido = null; }
+      const d = estado.conex[c.id];
+      if (d) tender(c, d, { animado: false, flojo: (estado.flojos || []).includes(c.id) }); else soltarEnReposo(c, false);
+    }
+    verPiezas();
+  }
+  function verPiezas() {
+    const hw = estado.hw || { interruptor: true, ram: 'bien', disipador: 'bien' };
+    const m = P.ram.grupo, pest = P.placa.pestanas.find(p => p.s === -1);
+    m.position.copy(base.ramP); m.quaternion.copy(base.ramQ); pest.piv.rotation.x = 0;
+    if (hw.ram === 'suelta') { m.position.y += 0.75; m.rotateZ(0.11); pest.piv.rotation.x = -0.6; }
+    const d = P.disipador.grupo; d.position.copy(base.disP); d.quaternion.copy(base.disQ);
+    if (hw.disipador === 'flojo') { d.position.y += 1.0; d.rotateZ(0.17); d.rotateY(0.2); }
+    const sw = P.fuente.interruptor; sw.rotation.set(0, 0, hw.interruptor ? 0.4 : -0.4); // tecla basculante: hundida por arriba (I) o por abajo (O)
+    sw.material.color.set(hw.interruptor ? 0x3fbf6a : 0xe5484d); sw.material.emissive.set(hw.interruptor ? 0x1b7a3c : 0x000000);
   }
   function curvaFloja(a, b, comba = 0.5) {
     const pts = [];
@@ -246,8 +297,9 @@ export function vistaCablea() {
     if (!animado) { poner(c.reposo); return; }
     animar(380, t => poner(desde.clone().lerp(c.reposo, t).add(V(0, Math.sin(Math.PI * t) * 2, 0))), ease.salida);
   }
-  async function tender(c, dest) {
-    const pts = c.ruta(dest), fin = pts[pts.length - 1];
+  async function tender(c, dest, { animado = true, flojo = false } = {}) {
+    const pts = c.ruta(dest).map(p => p.clone()); let fin = pts[pts.length - 1];
+    if (flojo) fin.y += 0.9; // a medio meter: la clavija no baja hasta el fondo
     c.cordon.visible = false;
     const k = P.placa.k;
     c.tendido = k.tubo(new THREE.CatmullRomCurve3(pts), ASPECTO[c.id].r, ASPECTO[c.id].color, 0.06, 90);
@@ -256,6 +308,8 @@ export function vistaCablea() {
     raiz.add(c.tendido);
     c.clavija.position.copy(fin).add(V(0, ASPECTO[c.id].clavija[1] / 2, 0));
     if (dest === 'vgpu' || dest === 'vplaca') c.clavija.position.copy(fin).add(V(-0.6, 0, 0));
+    c.clavija.rotation.set(0, 0, flojo ? 0.22 : 0);
+    if (!animado) { c.tendido.geometry.setDrawRange(0, Infinity); c.clavija.scale.setScalar(1); return; }
     c.clavija.scale.setScalar(0.001);
     await animar(520, t => c.tendido.geometry.setDrawRange(0, Math.floor((t * total) / 60) * 60), ease.lineal);
     c.tendido.geometry.setDrawRange(0, Infinity);
@@ -298,8 +352,14 @@ export function vistaCablea() {
   function alPulsar(ev) {
     if (!caso || estado.terminado || arrastre) return;
     const c = cableEnPunto(ev);
-    if (!c) return;
-    if (estado.conex[c.id]) {
+    if (!c) { toque = fase === 'reparar' ? { pieza: piezaEnPunto(ev), x: ev.clientX, y: ev.clientY } : null; return; }
+    toque = null;
+    if (fase === 'reparar') {
+      const no = manoProhibida(estado);
+      if (no) { avisar(no, 'peligro'); pintar(); return; }
+      if (estado.conex[c.id]) quitar(estado, c.id);
+      alSacar(estado, c.id);
+    } else if (estado.conex[c.id]) {
       const r = quitar(estado, c.id);
       if (!r.ok) { avisar(r.motivo, 'peligro'); pintar(); return; }
     } else if (estado.enchufado) { conectar(estado, c.id, caso.destinos[0]); avisar('¡Alto! El equipo está enchufado. Los cables se ponen y se quitan con la fuente desenchufada.', 'peligro'); pintar(); return; }
@@ -311,7 +371,11 @@ export function vistaCablea() {
     alMover(ev); pintar();
   }
   function alMover(ev) {
-    if (!arrastre) { const c = caso && !estado.terminado ? cableEnPunto(ev) : null; etiqueta(ev, c ? CABLES[c.id].nombre : ''); lienzo.style.cursor = c ? 'grab' : ''; return; }
+    if (!arrastre) {
+      const c = caso && !estado.terminado ? cableEnPunto(ev) : null;
+      const pz = !c && caso && !estado.terminado && fase === 'reparar' && !ev.buttons ? piezaEnPunto(ev) : null;
+      etiqueta(ev, c ? CABLES[c.id].nombre : pz ? PIEZAS[pz].nombre : ''); lienzo.style.cursor = c ? 'grab' : pz ? 'pointer' : ''; return;
+    }
     rayo(ev);
     const p = new THREE.Vector3();
     if (!ray.ray.intersectPlane(arrastre.plano, p)) return;
@@ -325,7 +389,11 @@ export function vistaCablea() {
     for (const r of rotulos) r.el.classList.toggle('cerca', r.d === d);
   }
   async function alSoltar(ev) {
-    if (!arrastre) return;
+    if (!arrastre) {
+      // un toque sin mover el ratón encima de una pieza: se abre lo que se puede hacer con ella
+      if (toque && toque.pieza && Math.hypot(ev.clientX - toque.x, ev.clientY - toque.y) < 6 && !estado.terminado) abrirPieza(toque.pieza);
+      toque = null; return;
+    }
     const { c, destino } = arrastre; arrastre = null;
     controles.enabled = true; try { lienzo.releasePointerCapture(ev.pointerId); } catch (e) { /* ya suelto */ }
     tooltip.classList.remove('visible'); for (const r of rotulos) r.el.classList.remove('cerca');
@@ -354,6 +422,44 @@ export function vistaCablea() {
     pintar();
   }
 
+  /* ---------- Piezas que se tocan con la mano (solo al reparar) ---------- */
+  function piezaEnPunto(ev) {
+    rayo(ev);
+    const hit = ray.intersectObjects(tocables.map(t => t.obj), true)[0];
+    if (!hit) return null;
+    for (let o = hit.object; o; o = o.parent) { const t = tocables.find(x => x.obj === o); if (t) return t.id; }
+    return null;
+  }
+  function abrirPieza(id) {
+    if (id === 'interruptor') { hacer(id, 'conmutar'); return; }
+    const def = PIEZAS[id];
+    // antes del diagnóstico solo se puede medir; lo demás ni se ofrece
+    const acciones = Object.entries(def.acciones).filter(([a]) => estado.diagnostico || a === 'medir');
+    if (!acciones.length) { hacer(id, Object.keys(def.acciones)[0]); return; }
+    forzar.replaceChildren(h('p', h('b', def.nombre), ': ¿qué haces?'),
+      ...acciones.map(([a, texto]) => h('button.am-btn', { type: 'button', onclick: () => { forzar.hidden = true; hacer(id, a); } }, texto)),
+      h('button.am-btn', { type: 'button', onclick: () => { forzar.hidden = true; } }, 'Dejarlo como está'));
+    forzar.hidden = false; panel.scrollTop = 0;
+  }
+  function hacer(id, accion) {
+    const r = tocar(estado, id, accion);
+    if (r.texto) avisar(r.texto, r.ok ? '' : 'peligro');
+    if (r.ok && r.cambia) verPiezas();
+    pintar();
+  }
+  // «Cablea y repara»: el equipo ya funciona; se entrega y vuelve con una avería
+  function empezarReparacion() {
+    notaA = puntuar(estado);
+    av = crearAveria(Math.floor(Math.random() * 2147483647), { caso, forzar: new URLSearchParams(location.search).get('averia') });
+    estado = estadoAveriado(av, estado.conex);
+    fase = 'reparar'; ultimo = null; causaElegida = ''; pasa.textContent = '';
+    ambientar(null); sincronizar(); pintar();
+    avisar('Unos días después, el equipo vuelve al taller.');
+    irA(VISTA.pos, VISTA.obj, 700); panel.scrollTop = 0;
+  }
+  bSeguir.addEventListener('click', empezarReparacion);
+  bEntregar.addEventListener('click', () => { if (estado.enchufado) { apagar(estado); ambientar(null); } entregar(caso, estado); pintar(); });
+
   /* ---------- Encender ---------- */
   const COLOR_LED = { CPU: 0xe5484d, VGA: 0xffffff, BOOT: 0x3fbf6a, DRAM: 0xffb020 };
   function ambientar(r) {
@@ -374,14 +480,16 @@ export function vistaCablea() {
     // se pulsa el botón de la caja
     const b = P.caja.boton, x0 = b.position.x;
     await animar(180, t => { b.position.x = x0 - 0.3 * t; }, ease.salida); await animar(220, t => { b.position.x = x0 - 0.3 + 0.3 * t; }, ease.salida);
-    ultimo = encender(caso, estado);
-    if (ultimo.tipo !== 'bien') detalle.push(explica(ultimo) || ultimo.texto);
+    ultimo = fase === 'reparar' ? encenderBanco(caso, estado) : encender(caso, estado);
+    if (ultimo.tipo !== 'bien' && fase !== 'reparar') detalle.push(explica(ultimo) || ultimo.texto);
     ambientar(ultimo);
     const M = V(-50, 34, -44);
     if (ultimo.tipo === 'averia') { burbuja('¡Chasquido!', destinos.eps.clone().add(V(0, 5, 0)), 'peligro'); burbuja('Huele a quemado', V(-46, 14, 0), 'peligro'); }
     else if (ultimo.tipo === 'nada') burbuja('No pasa nada…', V(CAJA.x1 + 1, 14, -15), 'peligro');
     else if (/Sin señal/.test(ultimo.pantalla)) { burbuja('Sin señal', M, 'peligro'); if (ultimo.led) burbuja('LED ' + ultimo.led + ' encendido', ctx.enPlaca(11, 3.4, 7.5), 'peligro'); }
     else if (!ultimo.arranca) { burbuja(ultimo.pantalla, M, 'peligro'); if (ultimo.led) burbuja('LED ' + ultimo.led + ' encendido', ctx.enPlaca(11, 3.4, 7.5), 'peligro'); }
+    else if (ultimo.falta === 'calor') burbuja('85 °C y subiendo', M, 'peligro');
+    else if (ultimo.falta === 'pila') burbuja('Fecha: 01/01/2020', M, 'peligro');
     else burbuja('¡Hay imagen!', M);
     pasa.textContent = ultimo.texto;
     if (estado.terminado) await esperar(900);
@@ -396,15 +504,58 @@ export function vistaCablea() {
     if (!caso) return;
     lista.replaceChildren(...caso.cables.map(id => {
       const d = estado.conex[id];
+      // al reparar, la lista no dice qué está puesto y qué no: eso se mira en el equipo
+      if (fase === 'reparar') return h('li', h('button', { type: 'button', title: 'Ver dónde está', onclick: () => { const c = cables[id]; irA(c.clavija.position.clone().add(V(14, 26, 22)), c.clavija.position.clone(), 600); } },
+        h('i', { style: `background:#${ASPECTO[id].color.toString(16).padStart(6, '0')}` }), h('span', CORTO[id]), h('small', CABLES[id].pista)));
       return h('li' + (d ? '.puesto' : ''), h('button', { type: 'button', title: 'Ver dónde está', onclick: () => { const c = cables[id]; irA(c.clavija.position.clone().add(V(14, 26, 22)), c.clavija.position.clone(), 600); } },
         h('i', { style: `background:#${ASPECTO[id].color.toString(16).padStart(6, '0')}` }), h('span', CORTO[id]), h('small', d ? '→ ' + ETIQUETA[d] : 'suelto')));
     }));
-    const libres = caso.cables.filter(c => !estado.conex[c]).length;
+    const libres = caso.cables.filter(c => !estado.conex[c]).length, rep = fase === 'reparar';
+    // en «Cablea y repara», al arrancar bien no se acaba: se entrega y sigue
+    const sigue = modo === 'completa' && !rep && estado.terminado && ultimo && ultimo.tipo === 'bien';
+    tituloPanel.textContent = rep ? 'Parte de avería' : 'Cables';
+    parteEl.hidden = !rep; if (rep) pintarParte();
     bEncender.hidden = estado.terminado;
-    bEncender.textContent = estado.enchufado ? 'Apagar y desenchufar' : 'Enchufar y encender';
+    bEncender.textContent = estado.enchufado ? 'Apagar y desenchufar' : rep ? 'Enchufar y pulsar el botón' : 'Enchufar y encender';
     bEncender.className = 'am-btn' + (estado.enchufado ? '' : ' am-principal');
-    if (!estado.enchufado && !estado.terminado && !pasa.textContent) pasa.textContent = libres ? `Quedan ${libres} cables sueltos. Puede que alguno sobre.` : '';
-    if (estado.terminado) resultadoEl.replaceChildren(resultado());
+    bSeguir.hidden = !sigue;
+    bEntregar.hidden = !(rep && estado.diagnostico && !estado.terminado);
+    if (!rep && !estado.enchufado && !estado.terminado && !pasa.textContent) pasa.textContent = libres ? `Quedan ${libres} cables sueltos. Puede que alguno sobre.` : '';
+    if (sigue) pasa.textContent = `Arranca, da imagen y giran todos los ventiladores. Cableado: ${puntuar(estado).nota.toLocaleString('es-ES')} / 10.`;
+    if (estado.terminado && !sigue) resultadoEl.replaceChildren(rep ? resultadoReparacion() : resultado());
+  }
+  function pintarParte() {
+    if (estado.diagnostico) {
+      const c = av.causas.find(x => x.id === estado.diagnostico);
+      parteEl.replaceChildren(h('p.cb-equipo', av.equipo), h('p.cb-queja', '«' + av.queja + '»'),
+        h('p', h('b', 'Tu diagnóstico: '), c.texto + '.'),
+        estado.terminado ? null : h('p.cb-ahora', 'Ahora repáralo: con el equipo desenchufado, arregla lo que esté mal. Después enciende y comprueba.'));
+      return;
+    }
+    const sel = h('select', { 'aria-label': 'Causa de la avería', onchange: e => { causaElegida = e.target.value; boton.disabled = !causaElegida; } },
+      h('option', { value: '' }, '— Elige la causa —'), ...av.causas.map(c => h('option', { value: c.id }, c.texto)));
+    sel.value = causaElegida;
+    const boton = h('button.am-btn', { type: 'button', disabled: !causaElegida, onclick: () => { diagnosticar(estado, causaElegida); avisar('Diagnóstico entregado. Ya puedes meter la mano: recuerda cómo tiene que estar el equipo para tocarlo.'); pintar(); } }, 'Entregar el diagnóstico');
+    parteEl.replaceChildren(h('p.cb-equipo', av.equipo), h('p.cb-queja', '«' + av.queja + '»'),
+      h('p', 'Mira el equipo por todos lados y enciéndelo si te hace falta. Hasta que entregues el diagnóstico no se toca nada.'), sel, boton);
+  }
+  function resultadoReparacion() {
+    const n = puntuarReparacion(av, estado), es = x => x.toLocaleString('es-ES');
+    const criticos = [...(notaA ? notaA.criticos : []), ...n.criticos];
+    let final = notaA ? Math.round(((notaA.nota + n.nota) / 2) * 10) / 10 : n.nota;
+    if (criticos.length) final = Math.min(final, TOPE_CRITICO);
+    const buena = av.causas.find(c => c.id === av.id).texto;
+    return h('div.tarjeta.av-resultado',
+      h('h3', `Resultado: ${es(final)} / 10`),
+      criticos.length ? h('p.mensaje.error', h('b', `Fallo crítico: la nota no pasa de ${TOPE_CRITICO}. `), criticos.join(' ')) : null,
+      notaA ? h('p', `Cableado: ${es(notaA.nota)} / 10 · Reparación: ${es(n.nota)} / 10. La nota es la media de las dos.`) : null,
+      h('ul.av-detalle',
+        h('li.' + (n.puntos.causa ? 'ok' : 'ko'), n.puntos.causa ? '✓ Diagnóstico correcto (4 de 4).' : `✗ Diagnóstico equivocado (0 de 4). La causa era: ${buena.charAt(0).toLowerCase() + buena.slice(1)}.`),
+        h('li.' + (n.puntos.reparado ? 'ok' : 'ko'), n.puntos.reparado ? (n.sinComprobar ? '✓ El equipo estaba arreglado (4 de 4), pero lo has entregado sin encenderlo para comprobarlo.' : '✓ El equipo arranca y lo has comprobado (4 de 4).') : '✗ El equipo sigue sin funcionar bien (0 de 4).'),
+        h('li.' + (n.puntos.limpio === 2 ? 'ok' : 'ko'), n.puntos.limpio === 2 ? '✓ Trabajo limpio: solo has tocado lo necesario (2 de 2).'
+          : `✗ Trabajo limpio: ${n.puntos.limpio} de 2.` + (n.sinComprobar ? ' No has comprobado que arranca.' : '') + (n.sobrantes.length ? ` Has tocado sin necesidad: ${n.sobrantes.join(', ')}.` : '') + (n.fallidos ? ` Encendidos de prueba sin arreglarlo: ${n.fallidos}.` : ''))),
+      h('p', { html: md(`**La solución:** ${av.fallo.solucion.replace('en ATX12V', 'en CPU_PWR (también llamado ATX12V)')}`) }),
+      h('button.btn.azul', { type: 'button', onclick: () => { nuevo(); el.scrollIntoView({ behavior: 'smooth' }); } }, 'Otro equipo'));
   }
   function resultado() {
     const n = puntuar(estado), sol = solucion(caso);

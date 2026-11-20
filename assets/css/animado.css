@@ -183,3 +183,14 @@
 .am-burbuja.cb-rotulo span { animation: none; font: 700 11.5px var(--f-mono); padding: 2px 6px; border-width: 1.5px; box-shadow: none; background: rgba(255, 250, 240, .92); border-radius: 6px; }
 .am-burbuja.cb-rotulo.cerca span { background: var(--c-naranja); color: #fff; font-size: 14px; }
 @media (max-width: 820px) { .cb-panel { position: static; width: auto; max-height: none; border-radius: 0; border-width: 3px 0 0; box-shadow: none; } .am-escena:has(.cb-panel) { height: auto; } .am-escena:has(.cb-panel) .am-lienzo { height: 62vh; } }
+/* Reparaciones en la mesa («Repara el equipo» y «Cablea y repara») */
+.cb-parte { display: grid; gap: 6px; margin: 6px 0 10px; }
+.cb-parte[hidden] { display: none; }
+.cb-parte p { margin: 0; font-size: 14.5px; line-height: 1.35; }
+.cb-parte .cb-equipo { font-weight: 800; font-size: 16px; }
+.cb-parte .cb-queja { padding: 7px 9px; background: #fff; border: 2px solid var(--c-tinta); border-radius: 10px; font-style: italic; }
+.cb-parte .cb-ahora { font-weight: 700; }
+.cb-parte select { width: 100%; font: inherit; font-size: 14px; padding: 6px; border: 2.5px solid var(--c-tinta); border-radius: 10px; background: #fff; }
+.cb-parte .am-btn, .cb-panel > .am-btn + .am-btn { width: 100%; }
+.cb-panel > .am-btn[hidden] { display: none; }
+.cb-forzar2 .am-btn { white-space: normal; text-align: left; line-height: 1.25; }

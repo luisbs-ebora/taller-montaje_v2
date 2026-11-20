@@ -14,7 +14,7 @@ const HERRAMIENTAS = [
   { href: '#/pordentro', texto: 'Por dentro', es: r => r.startsWith('pordentro') }
 ];
 const EVALUACION = [
-  { href: '#/practicas', texto: 'Prácticas', es: r => r === 'practicas' || /\/practica$/.test(r) || /\/reto\/\d+$/.test(r) || /\/cablea$/.test(r) },
+  { href: '#/practicas', texto: 'Prácticas', es: r => r === 'practicas' || /\/practica$/.test(r) || /\/reto\/\d+$/.test(r) || /\/cablea$/.test(r) || /\/repara$/.test(r) || /\/cablea-y-repara$/.test(r) },
   { href: '#/examenes', texto: 'Exámenes', es: r => r === 'examenes' || /\/examen$/.test(r) }
 ];
 
