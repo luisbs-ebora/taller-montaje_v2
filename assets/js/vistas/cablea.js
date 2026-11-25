@@ -32,7 +32,7 @@ const TEXTOS = {
     lead: 'El equipo está montado, pero sin un solo cable puesto. Coge cada clavija, llévala a su conector y, cuando creas que está todo, enchufa y enciende.' },
   repara: { etiqueta: 'Prueba A · Tema 3 · no cuenta para nota', titulo: 'Repara el equipo',
     lead: 'Te traen un equipo al taller. Míralo por todos lados, enciéndelo si hace falta y entrega el diagnóstico. Después arréglalo con tus manos y comprueba que arranca.' },
-  completa: { etiqueta: 'Prueba B · Tema 3 · no cuenta para nota', titulo: 'Cablea y repara',
+  completa: { etiqueta: 'Práctica · Tema 3 · no cuenta para nota', titulo: 'Cablea y repara',
     lead: 'Primero cableas el equipo y lo dejas funcionando. Cuando lo entregues, volverá al taller con una avería: tendrás que diagnosticarla y repararla en ese mismo equipo.' },
 };
 
@@ -56,16 +56,19 @@ export function vistaCablea(modo = 'cablea') {
   const tituloPanel = h('h2', 'Cables');
   const panel = h('aside.am-panel.cb-panel', h('div.am-panel-cab', tituloPanel), parteEl, forzar, bEncender, bSeguir, h('p.am-nota.cb-pasa2'), lista, bEntregar);
   const pasa = panel.querySelector('.cb-pasa2');
-  const escenaEl = h('div.am-escena', lienzo, capaRotulos, capaBurbujas, tooltip, aviso, pista, panel, sin3d);
+  // La mesa a la izquierda y el panel a la derecha, en su propia columna: el panel ya no tapa el equipo.
+  const vistaEl = h('div.cb-vista', lienzo, capaRotulos, capaBurbujas, tooltip, aviso, pista, sin3d);
+  const escenaEl = h('div.am-escena.cb-escena', vistaEl, panel);
   const resultadoEl = h('div');
   const bVista = h('button.btn.sec', { type: 'button', onclick: () => irA(VISTA.pos, VISTA.obj) }, 'Vista general');
   const bDetras = h('button.btn.sec', { type: 'button', onclick: () => irA(V(-112, 30, -30), V(-58, 6, -14)) }, 'Ver por detrás');
   const bOtro = h('button.btn.sec', { type: 'button', onclick: () => nuevo() }, 'Otro equipo');
+  const bGrande = h('button.btn.sec.cb-bgrande', { type: 'button', 'aria-pressed': 'false', title: 'Pantalla grande (tecla F; Esc para salir)' }, 'Pantalla grande');
+  // Botones y mesa juntos: es lo que se pone en pantalla completa.
+  const mesaEl = h('div.cb-mesa', h('div.fila.cb-barra', bVista, bDetras, bNombres, bOtro, bGrande), escenaEl);
   const el = h('div.animado',
-    h('div.am-cab',
-      h('div', h('span.etiqueta', T.etiqueta), h('h1', T.titulo), h('p.lead', T.lead)),
-      h('div.fila', bVista, bDetras, bNombres, bOtro)),
-    escenaEl, resultadoEl);
+    h('div.am-cab', h('div', h('span.etiqueta', T.etiqueta), h('h1', T.titulo), h('p.lead', T.lead))),
+    mesaEl, resultadoEl);
 
   /* ---------- Estado ---------- */
   let renderer, escena, camara, controles, raiz, ro;
@@ -107,7 +110,7 @@ export function vistaCablea(modo = 'cablea') {
     borde.scale.set((AW + 0.3) / AW, 0.9 / 0.6, (AD + 0.3) / AD); alf.add(borde); escena.add(alf);
     const rejilla = new THREE.GridHelper(AW - 2, 40, 0x86b0d6, 0x86b0d6); rejilla.scale.z = (AD - 2) / (AW - 2); rejilla.position.set(AX, 0.01, 0); escena.add(rejilla);
 
-    ro = new ResizeObserver(ajustar); ro.observe(escenaEl); ajustar();
+    ro = new ResizeObserver(ajustar); ro.observe(vistaEl); ajustar();
     const reloj = new THREE.Clock();
     renderer.setAnimationLoop(() => {
       const dt = Math.min(reloj.getDelta(), 0.05);
@@ -122,11 +125,11 @@ export function vistaCablea(modo = 'cablea') {
       controles.update();
       renderer.render(escena, camara);
       const w = lienzo.clientWidth, hh = lienzo.clientHeight;
-      for (const b of [...burbujas, ...rotulos]) {
+      for (const b of burbujas) {
         proy.copy(b.pos).project(camara);
         b.el.style.transform = `translate(${((proy.x + 1) / 2) * w}px, ${((1 - proy.y) / 2) * hh}px)`;
-        if (b.rotulo) b.el.style.visibility = proy.z < 1 ? 'visible' : 'hidden';
       }
+      colocarRotulos(w, hh);
     });
     lienzo.addEventListener('pointerdown', alPulsar);
     lienzo.addEventListener('pointermove', alMover);
@@ -135,12 +138,35 @@ export function vistaCablea(modo = 'cablea') {
     lienzo.addEventListener('pointerleave', () => { if (!arrastre) tooltip.classList.remove('visible'); });
     nuevo();
   }
+  // Rótulos de los conectores: si dos se pisan, el de más arriba sube hasta que quedan separados.
+  function colocarRotulos(w, hh) {
+    if (!verNombres) return;
+    const puestos = [];
+    const lista = rotulos.map(r => {
+      proy.copy(r.pos).project(camara);
+      if (!r.ancho) { const sp = r.el.firstChild; r.ancho = sp.offsetWidth; r.alto = sp.offsetHeight; }
+      return { r, x: ((proy.x + 1) / 2) * w, y: ((1 - proy.y) / 2) * hh, delante: proy.z < 1 };
+    }).sort((a, b) => b.y - a.y);
+    for (const p of lista) {
+      const { r } = p, aw = r.ancho + 4, ah = r.alto + 2;
+      let y = p.y;
+      if (r.ancho) for (let i = 0; i < 12; i++) {
+        // cada rótulo ocupa de y − alto hasta y (se ancla por abajo, centrado en x)
+        const pisa = puestos.find(q => Math.abs(q.x - p.x) < (q.aw + aw) / 2 && y > q.y - q.ah && y - ah < q.y);
+        if (!pisa) break;
+        y = pisa.y - pisa.ah;
+      }
+      puestos.push({ x: p.x, y, aw, ah });
+      r.el.style.transform = `translate(${p.x}px, ${y}px)`;
+      r.el.style.visibility = p.delante ? 'visible' : 'hidden';
+    }
+  }
   function ajustar() {
     if (!renderer) return;
-    const r = escenaEl.getBoundingClientRect();
+    const r = vistaEl.getBoundingClientRect();
     if (!r.width || !r.height) return;
     renderer.setSize(r.width, r.height, false);
-    const px = r.width > 820 ? panel.offsetWidth + 24 : 0;
+    const px = 0;
     camara.aspect = (r.width + px) / r.height;
     const visible = r.width / r.height;
     camara.fov = Math.min(72, Math.max(36, (2 * Math.atan(Math.tan((31 * Math.PI) / 180) / visible) * 180) / Math.PI));
@@ -497,7 +523,33 @@ export function vistaCablea(modo = 'cablea') {
     pintar();
   }
   bEncender.addEventListener('click', alEncender);
-  bNombres.addEventListener('click', () => { verNombres = !verNombres; capaRotulos.hidden = !verNombres; bNombres.setAttribute('aria-pressed', String(verNombres)); });
+  bNombres.addEventListener('click', () => { verNombres = !verNombres; capaRotulos.hidden = !verNombres; bNombres.setAttribute('aria-pressed', String(verNombres)); for (const r of rotulos) r.ancho = 0; });
+
+  /* ---------- Pantalla grande ---------- */
+  // Con la API de pantalla completa si el navegador la tiene; si no (iPhone), la mesa ocupa toda la ventana.
+  const enGrande = () => document.fullscreenElement === mesaEl || mesaEl.classList.contains('cb-grande');
+  function marcarGrande() {
+    const g = enGrande();
+    bGrande.setAttribute('aria-pressed', String(g)); bGrande.textContent = g ? 'Salir de pantalla grande' : 'Pantalla grande';
+    document.documentElement.classList.toggle('cb-sin-scroll', mesaEl.classList.contains('cb-grande'));
+    for (const r of rotulos) r.ancho = 0;
+  }
+  async function entrarGrande() {
+    if (mesaEl.requestFullscreen) { try { await mesaEl.requestFullscreen({ navigationUI: 'hide' }); return; } catch (e) { /* se queda en la ventana */ } }
+    mesaEl.classList.add('cb-grande'); marcarGrande();
+  }
+  function salirGrande() {
+    if (document.fullscreenElement === mesaEl) document.exitFullscreen().catch(() => {});
+    mesaEl.classList.remove('cb-grande'); marcarGrande();
+  }
+  bGrande.addEventListener('click', () => (enGrande() ? salirGrande() : entrarGrande()));
+  document.addEventListener('fullscreenchange', marcarGrande);
+  const alTeclear = ev => {
+    if (ev.target.closest && ev.target.closest('input, select, textarea')) return;
+    if ((ev.key === 'f' || ev.key === 'F') && !ev.ctrlKey && !ev.metaKey && !ev.altKey) { ev.preventDefault(); enGrande() ? salirGrande() : entrarGrande(); }
+    else if (ev.key === 'Escape' && mesaEl.classList.contains('cb-grande')) salirGrande();
+  };
+  document.addEventListener('keydown', alTeclear);
 
   /* ---------- Panel ---------- */
   function pintar() {
@@ -522,7 +574,11 @@ export function vistaCablea(modo = 'cablea') {
     bEntregar.hidden = !(rep && estado.diagnostico && !estado.terminado);
     if (!rep && !estado.enchufado && !estado.terminado && !pasa.textContent) pasa.textContent = libres ? `Quedan ${libres} cables sueltos. Puede que alguno sobre.` : '';
     if (sigue) pasa.textContent = `Arranca, da imagen y giran todos los ventiladores. Cableado: ${puntuar(estado).nota.toLocaleString('es-ES')} / 10.`;
-    if (estado.terminado && !sigue) resultadoEl.replaceChildren(rep ? resultadoReparacion() : resultado());
+    if (estado.terminado && !sigue) {
+      resultadoEl.replaceChildren(rep ? resultadoReparacion() : resultado());
+      // la nota sale debajo de la mesa: en pantalla grande no se vería
+      if (enGrande()) { salirGrande(); despues(350, () => resultadoEl.scrollIntoView({ behavior: 'smooth', block: 'start' })); }
+    }
   }
   function pintarParte() {
     if (estado.diagnostico) {
@@ -577,6 +633,9 @@ export function vistaCablea(modo = 'cablea') {
     destruir() {
       generacion++; cancelarAnimaciones(); temporizadores.forEach(clearTimeout); clearTimeout(avisoT);
       if (ro) ro.disconnect();
+      document.removeEventListener('fullscreenchange', marcarGrande); document.removeEventListener('keydown', alTeclear);
+      if (document.fullscreenElement === mesaEl) document.exitFullscreen().catch(() => {});
+      document.documentElement.classList.remove('cb-sin-scroll');
       if (renderer) { renderer.setAnimationLoop(null); renderer.dispose(); }
       if (controles) controles.dispose();
     },

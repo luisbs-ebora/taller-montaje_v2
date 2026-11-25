@@ -36,9 +36,8 @@ const RUTAS = [
   [/^lecciones$/, () => vistaLecciones()],
   [/^practicas$/, () => vistaPracticas()],
   [/^tema3\/practica$/, () => vistaAveria()],
-  [/^tema3\/cablea$/, () => vistaCablea()],
-  [/^tema3\/repara$/, () => vistaCablea('repara')],
-  [/^tema3\/cablea-y-repara$/, () => vistaCablea('completa')],
+  // Solo queda «Cablea y repara»; las direcciones de las dos prácticas sueltas llevan a ella.
+  [/^tema3\/(cablea|repara|cablea-y-repara)$/, () => vistaCablea('completa')],
   [/^tema3\/reto\/(\d{1,5})$/, m => vistaAveria(Number(m[1]))],
   [/^tema4\/practica$/, () => vistaMedir()],
   [/^tema3\/examen$/, () => vistaExamen34()],
